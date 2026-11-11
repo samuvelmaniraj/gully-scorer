@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-PKocrcKUKEB1L4HjIPaTLUvJv9XyBztDrloWptqrab4=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex,nofollow">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<title>Gully Scorer</title>
+<style>
+/* Layout: one narrow column like a scorer's clipboard; scoreboard on top, big tap pad below */
+:root{
+  --bg:#F3F5F2; --card:#FFFFFF; --ink:#16241D; --muted:#5D6B63; --line:#D6DDD8;
+  --turf:#1F6B45; --turf-soft:#E2EFE7; --ball:#B3261E; --ball-soft:#F8E4E2; --board:#14231B; --board-ink:#F4F7F1; --amber:#9A6200; --amber-soft:#FBF0D9;
+  --f-display:"Roboto Condensed","Arial Narrow","Helvetica Neue",sans-serif-condensed,system-ui,sans-serif;
+  --f-body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1612; --card:#18221C; --ink:#E8EEE9; --muted:#9AA9A0; --line:#2B3830;
+  --turf:#5CC48E; --turf-soft:#1C3127; --ball:#F07A70; --ball-soft:#3A1F1C; --board:#0A100C; --board-ink:#F4F7F1; --amber:#F2B451; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1612; --card:#18221C; --ink:#E8EEE9; --muted:#9AA9A0; --line:#2B3830;
+  --turf:#5CC48E; --turf-soft:#1C3127; --ball:#F07A70; --ball-soft:#3A1F1C; --board:#0A100C; --board-ink:#F4F7F1; --amber:#F2B451; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 32px}
+.wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:26px;letter-spacing:.02em;text-transform:uppercase;line-height:1}
+.brand span{color:var(--ball)}
+.chip{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--line);color:var(--muted);white-space:nowrap}
+.chip.live{background:var(--turf-soft);color:var(--turf)}
+.chip.warn{background:var(--amber-soft);color:var(--amber)}
+.chip.bad{background:var(--ball-soft);color:var(--ball)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+h2{font-family:var(--f-display);font-size:20px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin:0;text-wrap:balance}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--muted)}
+input{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+input:focus-visible,button:focus-visible{outline:2px solid var(--turf);outline-offset:2px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.err{color:var(--ball);font-size:13px;min-height:0}
+button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:manipulation}
+.btn{background:var(--turf);color:#fff;font-weight:600;padding:13px 16px;font-size:16px}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.danger{background:var(--ball-soft);color:var(--ball)}
+.btn.danger.armed{background:var(--ball);color:#fff}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btns .btn{flex:1 1 auto}
+/* scoreboard */
+.board{background:var(--board);color:var(--board-ink);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.bteam{font-size:13px;text-transform:uppercase;letter-spacing:.08em;opacity:.75;display:flex;justify-content:space-between;gap:8px}
+.score{font-family:var(--f-display);font-weight:700;font-size:72px;line-height:.9;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.score small{font-size:28px;font-weight:500;opacity:.8}
+.stats{display:flex;gap:18px;flex-wrap:wrap;font-variant-numeric:tabular-nums;font-size:14px}
+.stats b{font-family:var(--f-display);font-size:20px;font-weight:600;margin-right:4px}
+.target{font-size:14px;background:rgba(255,255,255,.08);border-radius:10px;padding:8px 10px}
+.over{display:flex;gap:6px;flex-wrap:wrap;min-height:34px;align-items:center}
+.over .lab{font-size:12px;opacity:.6;margin-right:4px;text-transform:uppercase;letter-spacing:.06em}
+.b{min-width:32px;height:32px;padding:0 6px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-display);font-weight:600;font-size:16px;background:rgba(255,255,255,.12)}
+.b.four,.b.six{background:#2E8B57;color:#fff}
+.b.w{background:#C62F25;color:#fff}
+.b.x{background:#B57A12;color:#fff}
+.prev{font-size:13px;opacity:.7}
+.result{font-family:var(--f-display);font-size:24px;font-weight:600;color:#9BE0B8}
+/* pad */
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.k{background:var(--card);border:1px solid var(--line);color:var(--ink);font-family:var(--f-display);font-weight:600;font-size:26px;padding:14px 0;border-radius:12px}
+.k:active{transform:scale(.97)}
+.k.big{background:var(--turf-soft);color:var(--turf);border-color:transparent}
+.k.ext{font-size:20px;color:var(--amber);background:var(--amber-soft);border-color:transparent}
+.k.ext.on{background:var(--amber);color:#fff}
+.k.wk{grid-column:span 2;background:var(--ball-soft);color:var(--ball);border-color:transparent;font-size:22px}
+.k.wk.on{background:var(--ball);color:#fff}
+.k.undo{grid-column:span 2;font-size:20px;color:var(--muted)}
+.k:disabled{opacity:.35;cursor:not-allowed}
+.hint{font-size:13px;color:var(--amber);min-height:20px}
+.share{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+#qr{background:#fff;padding:8px;border-radius:10px;line-height:0}
+#qr img,#qr canvas{width:132px;height:132px}
+.link{font-size:13px;word-break:break-all;color:var(--muted);flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.link code{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);user-select:all}
+.note{font-size:13px;color:var(--muted)}
+.banner{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--turf-soft);color:var(--turf)}
+@media (prefers-reduced-motion:reduce){.k:active{transform:none}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <div class="brand">Gully<span>·</span>Scorer</div>
+    <span id="net" class="chip">Not started</span>
+  </header>
+
+  <section id="setup" class="card">
+    <h2>New match</h2>
+    <form id="setupForm" class="card" style="border:none;padding:0">
+      <div class="row2">
+        <label for="t1">Batting first<input id="t1" placeholder="Team A" value="Team A" maxlength="20"></label>
+        <label for="t2">Bowling first<input id="t2" placeholder="Team B" value="Team B" maxlength="20"></label>
+      </div>
+      <div class="row2">
+        <label for="ov">Overs per side<input id="ov" type="number" inputmode="numeric" min="1" max="50" value="6"></label>
+        <label for="wk">Wickets per side<input id="wk" type="number" inputmode="numeric" min="1" max="10" value="5"></label>
+      </div>
+      <div id="setupErr" class="err"></div>
+      <button class="btn" type="submit">Start match</button>
+    </form>
+    <p class="note">Keep this page open on the scorer's phone. Viewers watch live through the share link. No sign-up, no names of players, nothing saved online. The match disappears from this phone when you end it.</p>
+  </section>
+
+  <section id="boardWrap" hidden>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section id="scorer" class="card" hidden>
+    <div id="hint" class="hint"></div>
+    <div class="pad" id="pad">
+      <button class="k big" data-r="0" aria-label="Dot ball">0</button>
+      <button class="k big" data-r="1">1</button>
+      <button class="k big" data-r="2">2</button>
+      <button class="k big" data-r="3">3</button>
+      <button class="k big" data-r="4">4</button>
+      <button class="k big" data-r="6">6</button>
+      <button class="k ext" id="wdBtn" aria-pressed="false">Wd</button>
+      <button class="k ext" id="nbBtn" aria-pressed="false">Nb</button>
+      <button class="k wk" id="wkBtn" aria-pressed="false">Wicket</button>
+      <button class="k undo" id="undoBtn">Undo</button>
+    </div>
+    <div id="breakBox" class="btns" hidden>
+      <button class="btn" id="nextInn">Start 2nd innings</button>
+    </div>
+  </section>
+
+  <section id="shareCard" class="card" hidden>
+    <h2>Share live score</h2>
+    <div class="share">
+      <div id="qr" aria-label="QR code for the viewer link"></div>
+      <div class="link">
+        <code id="linkTxt"></code>
+        <div class="btns">
+          <button class="btn ghost" id="copyBtn">Copy link</button>
+          <a class="btn ghost" id="waBtn" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">WhatsApp</a>
+        </div>
+      </div>
+    </div>
+    <p class="note" id="watchers">No viewers yet.</p>
+  </section>
+
+  <section id="endCard" hidden>
+    <button class="btn danger" id="endBtn" style="width:100%">End match and delete</button>
+  </section>
+
+  <section id="viewerNote" hidden>
+    <div class="banner" id="viewerMsg">Connecting to the scorer…</div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
+let S = null, pending = null, pw = false, peer = null, conns = new Set(), isViewer = false, wakeLock = null;
+
+/* ---------- scoring maths (pure) ---------- */
+function stats(inn){
+  let runs=0,wk=0,legal=0;
+  for(const b of inn.balls){ runs += b.r + (b.x?1:0); if(b.w) wk++; if(!b.x) legal++; }
+  return {runs,wk,legal};
+}
+const oversTxt = l => Math.floor(l/6) + "." + (l%6);
+function target(){ return S.innings[0].done ? stats(S.innings[0]).runs + 1 : null; }
+function inningsOver(i){
+  const st = stats(S.innings[i]);
+  if(st.legal >= S.overs*6 || st.wk >= S.wickets) return true;
+  return i===1 && st.runs >= target();
+}
+function resultTxt(){
+  const t = target(), s2 = stats(S.innings[1]), A = S.teams[0], B = S.teams[1];
+  if(s2.runs >= t){ const left = S.wickets - s2.wk; return `${B} won by ${left} wicket${left===1?"":"s"}`; }
+  if(s2.runs === t-1) return "Match tied";
+  const by = t-1-s2.runs; return `${A} won by ${by} run${by===1?"":"s"}`;
+}
+function ballLabel(b){
+  if(b.w){ const p=[]; if(b.x) p.push(b.x==="nb"?"Nb":"Wd"); if(b.r) p.push(b.r); p.push("W"); return p.join("+"); }
+  if(b.x==="wd") return b.r ? (b.r+1)+"wd" : "Wd";
+  if(b.x==="nb") return b.r ? "Nb+"+b.r : "Nb";
+  return b.r===0 ? "•" : String(b.r);
+}
+function currentOver(inn){
+  let legal=0, out=[], last=-1;
+  inn.balls.forEach(b=>{ const idx=Math.floor(legal/6); if(!b.x) legal++; out.push([idx,b]); last=idx; });
+  return {idx:last, balls: out.filter(o=>o[0]===last).map(o=>o[1])};
+}
+
+/* ---------- never trust incoming data: rebuild it from plain numbers and short text ---------- */
+function clean(s){
+  const n=(v,max)=>{ v=Math.floor(+v); return Number.isFinite(v)&&v>=0&&v<=max ? v : 0; };
+  if(!s || !Array.isArray(s.teams) || s.teams.length!==2 || !Array.isArray(s.innings) || s.innings.length!==2) return null;
+  return {
+    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12),
+    teams:s.teams.map(t=>String(t).slice(0,20)),
+    overs:n(s.overs,50)||1, wickets:n(s.wickets,10)||1, cur:s.cur===1?1:0, done:!!s.done,
+    innings:s.innings.map(inn=>({ done:!!(inn&&inn.done),
+      balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({ r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w) })) }))
+  };
+}
+
+/* ---------- render ---------- */
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function render(){
+  if(!S) return;
+  const i = S.cur, inn = S.innings[i], st = stats(inn), bat = S.teams[i];
+  const crr = st.legal ? (st.runs/(st.legal/6)).toFixed(2) : "0.00";
+  let html = `<div class="bteam"><span>${esc(bat)} batting</span><span>${i===0?"1st":"2nd"} innings</span></div>
+    <div class="score">${st.runs}/${st.wk}<small>${oversTxt(st.legal)} / ${S.overs} ov</small></div>
+    <div class="stats"><span><b>${crr}</b>run rate</span>`;
+  const t = target();
+  if(i===1 && t){
+    const need = Math.max(0, t-st.runs), ballsLeft = S.overs*6 - st.legal;
+    const rrr = ballsLeft>0 ? (need/(ballsLeft/6)).toFixed(2) : "–";
+    html += `<span><b>${rrr}</b>required</span></div>`;
+    if(!S.done) html += `<div class="target">${esc(bat)} need <b>${need}</b> from <b>${ballsLeft}</b> ball${ballsLeft===1?"":"s"} (target ${t})</div>`;
+  } else html += `</div>`;
+  const co = currentOver(inn);
+  html += `<div class="over"><span class="lab">${co.idx<0?"This over":"Over "+(co.idx+1)}</span>` +
+    (co.balls.length ? co.balls.map(b=>{
+      const c = b.w?"w":b.x?"x":b.r===4?"four":b.r===6?"six":"";
+      return `<span class="b ${c}">${ballLabel(b)}</span>`; }).join("") : `<span class="prev">Waiting for first ball</span>`) + `</div>`;
+  if(i===1){ const p = stats(S.innings[0]); html += `<div class="prev">${esc(S.teams[0])}: ${p.runs}/${p.wk} (${oversTxt(p.legal)} ov)</div>`; }
+  if(S.done) html += `<div class="result">${esc(resultTxt())}</div>`;
+  else if(i===0 && inn.done) html += `<div class="result">Innings break · target ${target()}</div>`;
+  $("board").innerHTML = html;
+
+  if(!isViewer){
+    const locked = S.done || inn.done;
+    document.querySelectorAll("#pad button").forEach(b=>{ if(b.id!=="undoBtn") b.disabled = locked; });
+    $("undoBtn").disabled = !inn.balls.length && !(i===1 && !S.innings[1].balls.length);
+    $("breakBox").hidden = !(i===0 && inn.done);
+    $("wdBtn").classList.toggle("on", pending==="wd"); $("wdBtn").setAttribute("aria-pressed", pending==="wd");
+    $("nbBtn").classList.toggle("on", pending==="nb"); $("nbBtn").setAttribute("aria-pressed", pending==="nb");
+    $("wkBtn").classList.toggle("on", pw); $("wkBtn").setAttribute("aria-pressed", pw);
+    const ex = pending==="wd" ? "Wide" : pending==="nb" ? "No-ball" : "";
+    $("hint").textContent = pw ? (ex ? ex+" + wicket: tap runs completed before the run out" : "Wicket: tap runs completed before the out (0 if bowled or caught)") :
+      pending==="wd" ? "Wide: tap extra runs taken (0 for just the wide)" :
+      pending==="nb" ? "No-ball: tap runs off the bat (0 if none)" : "";
+  }
+}
+
+/* ---------- scorer actions ---------- */
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({at:Date.now(), S})); }catch(e){} }
+function commit(){ save(); render(); broadcast(); }
+function addBall(r){
+  const inn = S.innings[S.cur]; if(S.done || inn.done) return;
+  inn.balls.push({r, x:pending, w:pw}); pending = null; pw = false;
+  if(inningsOver(S.cur)){ inn.done = true; if(S.cur===1) S.done = true; }
+  commit();
+}
+function undo(){
+  let inn = S.innings[S.cur];
+  if(!inn.balls.length && S.cur===1){ S.cur = 0; inn = S.innings[0]; }
+  if(!inn.balls.length) return;
+  inn.balls.pop(); inn.done = false; S.done = false; pending = null; pw = false; commit();
+}
+document.querySelectorAll("#pad [data-r]").forEach(b=> b.addEventListener("click",()=>addBall(+b.dataset.r)));
+$("wdBtn").onclick = ()=>{ pending = pending==="wd"?null:"wd"; render(); };
+$("nbBtn").onclick = ()=>{ pending = pending==="nb"?null:"nb"; render(); };
+$("wkBtn").onclick = ()=>{ pw = !pw; render(); };
+$("undoBtn").onclick = undo;
+$("nextInn").onclick = ()=>{ S.cur = 1; commit(); };
+
+$("setupForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const t1=$("t1").value.trim(), t2=$("t2").value.trim(), ov=+$("ov").value, wk=+$("wk").value;
+  if(!t1 || !t2){ $("setupErr").textContent="Enter both team names."; return; }
+  if(t1.toLowerCase()===t2.toLowerCase()){ $("setupErr").textContent="Team names must be different."; return; }
+  if(!(ov>=1 && ov<=50)){ $("setupErr").textContent="Overs must be between 1 and 50."; return; }
+  if(!(wk>=1 && wk<=10)){ $("setupErr").textContent="Wickets must be between 1 and 10."; return; }
+  const abc="abcdefghjkmnpqrstuvwxyz23456789", rnd=new Uint8Array(10); crypto.getRandomValues(rnd);
+  let id=""; for(const v of rnd) id+=abc[v%abc.length];
+  S = {id, teams:[t1,t2], overs:ov, wickets:wk, cur:0, done:false, innings:[{balls:[],done:false},{balls:[],done:false}]};
+  startScorer();
+});
+["t1","t2","ov","wk"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
+
+let armT = null;
+$("endBtn").onclick = ()=>{
+  const b = $("endBtn");
+  if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="Tap again to delete the match"; armT=setTimeout(()=>{b.classList.remove("armed"); b.textContent="End match and delete";},4000); return; }
+  clearTimeout(armT);
+  conns.forEach(c=>{ try{ c.send({type:"end"}); }catch(e){} });
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  setTimeout(()=>{ try{ peer && peer.destroy(); }catch(e){} location.hash=""; location.reload(); }, 600);
+};
+
+function startScorer(){
+  $("setup").hidden = true;
+  ["boardWrap","scorer","shareCard","endCard"].forEach(id=>$(id).hidden=false);
+  const link = location.href.split("#")[0] + "#watch-" + S.id;
+  $("linkTxt").textContent = link;
+  $("waBtn").href = "https://wa.me/?text=" + encodeURIComponent(`Live score: ${S.teams[0]} vs ${S.teams[1]} ${link}`);
+  $("qr").innerHTML = "";
+  try{ new QRCode($("qr"), {text:link, width:132, height:132, colorDark:"#000000", colorLight:"#ffffff"}); }catch(e){ $("qr").hidden = true; }
+  keepAwake(); commit(); host();
+}
+$("copyBtn").onclick = ()=>{
+  const t = $("linkTxt").textContent;
+  navigator.clipboard.writeText(t).then(()=>{ $("copyBtn").textContent="Copied"; setTimeout(()=>$("copyBtn").textContent="Copy link",1500); })
+    .catch(()=>{ const r=document.createRange(); r.selectNodeContents($("linkTxt")); const s=getSelection(); s.removeAllRanges(); s.addRange(r); });
+};
+
+/* ---------- keep scorer screen on ---------- */
+async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && S && !isViewer) keepAwake(); });
+
+/* ---------- live sharing (peer-to-peer, nothing stored on a server) ---------- */
+function setNet(txt, cls){ const n=$("net"); n.textContent=txt; n.className="chip "+(cls||""); }
+function updCount(){ const n=conns.size; $("watchers").textContent = n ? `${n} viewer${n===1?"":"s"} watching live.` : "No viewers yet."; if(peer && peer.open) setNet("Live · "+n+" watching","live"); }
+function broadcast(){ conns.forEach(c=>{ try{ if(c.open) c.send({type:"state", s:S}); }catch(e){} }); }
+let hostTries = 0;
+function host(){
+  if(!window.Peer){ setNet("Offline · scoring only","warn"); $("watchers").textContent="Live sharing could not load here. Scoring still works on this phone."; return; }
+  peer = new Peer(PREFIX+S.id, {debug:0});
+  peer.on("open",()=>{ hostTries=0; updCount(); });
+  peer.on("connection", c=>{
+    c.on("open",()=>{ conns.add(c); c.send({type:"state", s:S}); updCount(); });
+    c.on("close",()=>{ conns.delete(c); updCount(); });
+    c.on("error",()=>{ conns.delete(c); updCount(); });
+  });
+  peer.on("disconnected",()=>{ setNet("Reconnecting…","warn"); setTimeout(()=>{ if(peer && !peer.destroyed) peer.reconnect(); },2000); });
+  peer.on("error", e=>{
+    if(e.type==="unavailable-id" && hostTries++ < 10){ setNet("Reconnecting…","warn"); try{peer.destroy();}catch(_){}; setTimeout(host,5000); return; }
+    if(e.type==="network" || e.type==="server-error" || e.type==="socket-error"){ setNet("Offline · retrying","warn"); return; }
+    if(e.type==="peer-unavailable") return;
+    setNet("Sharing error","bad");
+  });
+}
+
+function startViewer(id){
+  isViewer = true;
+  $("setup").hidden = true; $("boardWrap").hidden = false; $("viewerNote").hidden = false;
+  $("board").innerHTML = `<div class="bteam"><span>Live score</span></div><div class="prev">Waiting for the scorer's phone…</div>`;
+  if(!window.Peer){ setNet("Unavailable","bad"); $("viewerMsg").textContent="Live view could not load in this browser."; return; }
+  let ended=false, misses=0, conn=null;
+  setNet("Connecting…","warn");
+  peer = new Peer({debug:0});
+  const connect = ()=>{
+    if(ended || !peer || peer.destroyed) return;
+    conn = peer.connect(PREFIX+id, {reliable:true});
+    conn.on("open",()=>{ misses=0; setNet("Live","live"); $("viewerMsg").textContent="Watching live. The score updates by itself."; });
+    conn.on("data", d=>{
+      if(d && d.type==="state"){ const c=clean(d.s); if(c){ S=c; render(); } }
+      if(d && d.type==="end"){ ended=true; setNet("Match ended",""); $("viewerMsg").textContent="The scorer ended this match. Final score shown above."; try{peer.destroy();}catch(e){} }
+    });
+    conn.on("close",()=>{ if(!ended){ setNet("Reconnecting…","warn"); $("viewerMsg").textContent="Lost the scorer's phone. Trying again…"; setTimeout(connect,3000); } });
+  };
+  peer.on("open", connect);
+  peer.on("error", e=>{
+    if(e.type==="peer-unavailable"){
+      misses++;
+      $("viewerMsg").textContent = misses>20 ? "The scorer's phone is offline or the match has ended. Still checking every few seconds." : "Waiting for the scorer's phone to come online…";
+      setNet(misses>20?"Scorer offline":"Waiting…","warn");
+      setTimeout(connect, misses>20?10000:4000); return;
+    }
+    if(e.type==="network" || e.type==="server-error" || e.type==="socket-error"){ setNet("No connection","bad"); setTimeout(()=>location.reload(),8000); }
+  });
+  peer.on("disconnected",()=>{ setTimeout(()=>{ if(peer && !peer.destroyed && !ended) peer.reconnect(); },2000); });
+}
+
+/* ---------- boot ---------- */
+(function boot(){
+  const m = location.hash.match(/^#watch-([a-z0-9]{6,12})$/);
+  if(m){ startViewer(m[1]); return; }
+  try{
+    const saved = JSON.parse(localStorage.getItem(KEY)||"null");
+    const c = saved && Date.now()-saved.at < TTL ? clean(saved.S) : null;
+    if(c && c.id){ S = c; startScorer(); return; }
+    localStorage.removeItem(KEY);
+  }catch(e){}
+})();
+</script>
+
+</body>
+</html>
