@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-EgUbLvNb5XF/A4XIh941tFErbWZJOudVRWC2j2J2lZQ=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://0.peerjs.com wss://0.peerjs.com https://*.metered.live; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-epwreB2eWwU+yrvpfEsO+BCZcyM/fz1PhWc++99U1So=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -202,8 +202,8 @@ td .how{display:block;font-size:12px;color:var(--muted)}
         </div>
       </div>
     </div>
-    <p class="note" id="watchers">No viewers yet.</p>
-    <p class="note">Tip: keep this screen open while scoring. If you switch apps, viewers keep seeing the last score and catch up as soon as you come back.</p>
+    <p class="note" id="watchers">Sending live updates…</p>
+    <p class="note">Works across Wi-Fi and mobile data. Updates are encrypted, and only people with this link can read the score. If you switch apps, viewers keep the last score and catch up when you're back.</p>
   </section>
 
   <section id="endCard" hidden>
@@ -215,30 +215,40 @@ td .how{display:block;font-size:12px;color:var(--muted)}
   </section>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
-/* Relay for phones on networks that block direct connections (Metered free TURN). Leave empty to connect directly only. */
-const TURN_APP = "", TURN_KEY = "";
-let iceCache = null;
-async function peerOpts(){
-  const o = {debug:0};
-  if(!TURN_APP || !TURN_KEY) return o;
-  try{
-    if(!iceCache){
-      const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), 5000);
-      const r = await fetch(`https://${TURN_APP}.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(TURN_KEY)}`, {signal:ctl.signal, referrerPolicy:"no-referrer"});
-      clearTimeout(t);
-      const list = await r.json();
-      if(Array.isArray(list) && list.length) iceCache = list.filter(s=>s && (typeof s.urls==="string" || Array.isArray(s.urls))).slice(0,8);
-    }
-    if(iceCache) o.config = {iceServers: iceCache};
-  }catch(e){}
-  return o;
+/* Live updates go through the public ntfy.sh relay, end-to-end encrypted.
+   The key lives only in the link's #part, which browsers never send to any server. */
+const RELAY = "https://ntfy.sh/", RELAY_WS = "wss://ntfy.sh/";
+let K = null, cryptoKey = null;
+const topic = () => PREFIX + S.id;
+function b64e(u8){ let s=""; for(let i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+function b64d(s){ s=s.replace(/-/g,"+").replace(/_/g,"/"); while(s.length%4) s+="="; return Uint8Array.from(atob(s),c=>c.charCodeAt(0)); }
+const importKey = k => crypto.subtle.importKey("raw", b64d(k), "AES-GCM", false, ["encrypt","decrypt"]);
+async function squeeze(bytes, out){
+  if(typeof CompressionStream==="undefined") return null;
+  const st = new Blob([bytes]).stream().pipeThrough(out ? new CompressionStream("deflate-raw") : new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(st).arrayBuffer());
 }
-let S = null, pending = null, pw = false, held = null, peer = null, conns = new Set(), isViewer = false, wakeLock = null;
+async function seal(obj){
+  const raw = new TextEncoder().encode(JSON.stringify(obj));
+  const z = await squeeze(raw, true).catch(()=>null), data = z || raw;
+  const body = new Uint8Array(1+data.length); body[0] = z ? 1 : 0; body.set(data, 1);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, cryptoKey, body));
+  const all = new Uint8Array(12+ct.length); all.set(iv); all.set(ct, 12);
+  return "g1." + b64e(all);
+}
+async function unseal(txt){
+  if(typeof txt!=="string" || !txt.startsWith("g1.") || txt.length>400000) return null;
+  const all = b64d(txt.slice(3));
+  const pt = new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM", iv:all.slice(0,12)}, cryptoKey, all.slice(12)));
+  const data = pt[0]===1 ? await squeeze(pt.slice(1), false) : pt.slice(1);
+  return JSON.parse(new TextDecoder().decode(data));
+}
+let S = null, pending = null, pw = false, held = null, isViewer = false, wakeLock = null;
 
 /* ---------- scoring maths (pure) ---------- */
 const full = () => S.mode === "full";
@@ -462,7 +472,7 @@ function confirmPick(){
 }
 
 /* ---------- scorer actions ---------- */
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify({at:Date.now(), S})); }catch(e){} }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({at:Date.now(), S, k:K})); }catch(e){} }
 function commit(){ S.u = Date.now(); save(); render(); broadcast(); }
 function push(ball){
   const inn = S.innings[S.cur];
@@ -526,9 +536,11 @@ $("setupForm").addEventListener("submit", e=>{
       if(new Set(list.map(s=>s.toLowerCase())).size!==list.length) return fail(`${tn} has the same name twice. Make each name different.`);
     }
   } else if(!(wk>=1 && wk<=14)) return fail("Wickets must be between 1 and 14.");
-  const abc="abcdefghjkmnpqrstuvwxyz23456789", rnd=new Uint8Array(10); crypto.getRandomValues(rnd);
+  const abc="abcdefghjkmnpqrstuvwxyz23456789", rnd=new Uint8Array(20); crypto.getRandomValues(rnd);
   let id=""; for(const v of rnd) id+=abc[v%abc.length];
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
+  K = b64e(crypto.getRandomValues(new Uint8Array(16)));
+  importKey(K).then(k=>{ cryptoKey = k; broadcast(); });
   S = {id, mode, players, oneSide: mode==="full" && $("oneSide").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   startScorer();
 });
@@ -539,20 +551,20 @@ $("endBtn").onclick = ()=>{
   const b = $("endBtn");
   if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="Tap again to delete the match"; armT=setTimeout(()=>{b.classList.remove("armed"); b.textContent="End match and delete";},4000); return; }
   clearTimeout(armT);
-  conns.forEach(c=>{ try{ c.send({type:"end"}); }catch(e){} });
-  try{ localStorage.removeItem(KEY); }catch(e){}
-  setTimeout(()=>{ try{ peer && peer.destroy(); }catch(e){} location.hash=""; location.reload(); }, 600);
+  b.disabled = true; b.textContent = "Ending match…";
+  const done = ()=>{ try{ localStorage.removeItem(KEY); }catch(e){} location.hash=""; location.reload(); };
+  seal({t:"end"}).then(body=>fetch(RELAY+topic(), {method:"POST", body, referrerPolicy:"no-referrer"})).catch(()=>{}).finally(done);
 };
 
 function startScorer(){
   $("setup").hidden = true;
   ["boardWrap","scorer","shareCard","endCard"].forEach(id=>$(id).hidden=false);
-  const link = location.href.split("#")[0] + "#watch-" + S.id;
+  const link = location.href.split("#")[0] + "#watch-" + S.id + "." + K;
   $("linkTxt").textContent = link;
   $("waBtn").href = "https://wa.me/?text=" + encodeURIComponent(`Live score: ${S.teams[0]} vs ${S.teams[1]} ${link}`);
   $("qr").innerHTML = "";
   try{ new QRCode($("qr"), {text:link, width:132, height:132, colorDark:"#000000", colorLight:"#ffffff"}); }catch(e){ $("qr").hidden = true; }
-  keepAwake(); commit(); host();
+  keepAwake(); commit();
 }
 $("copyBtn").onclick = ()=>{
   const t = $("linkTxt").textContent;
@@ -564,87 +576,94 @@ $("copyBtn").onclick = ()=>{
 async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
 document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState!=="visible" || !S || isViewer) return;
-  keepAwake();
-  if(!peer || peer.destroyed){ hostTries=0; host(); }
-  else if(peer.disconnected){ try{ peer.reconnect(); }catch(e){} }
-  conns.forEach(c=>{ if(!c.open) conns.delete(c); });
-  broadcast(); updCount();
+  keepAwake(); broadcast();
 });
 
-/* ---------- live sharing (peer-to-peer, nothing stored on a server) ---------- */
+/* ---------- live sharing: encrypted updates through the relay ---------- */
 function setNet(txt, cls){ const n=$("net"); n.textContent=txt; n.className="chip "+(cls||""); }
-function updCount(){ const n=conns.size; $("watchers").textContent = n ? `${n} viewer${n===1?"":"s"} watching live.` : "No viewers yet."; if(peer && peer.open) setNet("Live · "+n+" watching","live"); }
-function broadcast(){ conns.forEach(c=>{ try{ if(c.open) c.send({type:"state", s:S}); }catch(e){} }); }
-let hostTries = 0;
-async function host(){
-  if(!window.Peer){ setNet("Offline · scoring only","warn"); $("watchers").textContent="Live sharing could not load here. Scoring still works on this phone."; return; }
-  peer = new Peer(PREFIX+S.id, await peerOpts());
-  peer.on("open",()=>{ hostTries=0; updCount(); });
-  peer.on("connection", c=>{
-    c.on("open",()=>{ conns.add(c); c.send({type:"state", s:S}); updCount(); });
-    c.on("close",()=>{ conns.delete(c); updCount(); });
-    c.on("error",()=>{ conns.delete(c); updCount(); });
-  });
-  peer.on("disconnected",()=>{ setNet("Reconnecting…","warn"); setTimeout(()=>{ if(peer && !peer.destroyed) peer.reconnect(); },2000); });
-  peer.on("error", e=>{
-    if(e.type==="unavailable-id" && hostTries++ < 20){ setNet("Reconnecting…","warn"); try{peer.destroy();}catch(_){}; setTimeout(host,3000); return; }
-    if(e.type==="network" || e.type==="server-error" || e.type==="socket-error"){ setNet("Offline · retrying","warn"); try{peer.destroy();}catch(_){}; setTimeout(host,4000); return; }
-    if(e.type==="peer-unavailable") return;
-    setNet("Sharing error","bad");
-  });
+let sendTimer = null, sending = false, dirty = false;
+function broadcast(){ dirty = true; if(!sendTimer) sendTimer = setTimeout(flush, 700); }
+function later(ms){ if(!sendTimer) sendTimer = setTimeout(flush, ms); }
+function slim(){ const c = JSON.parse(JSON.stringify(S)); c.innings.forEach(inn=>inn.balls.forEach(b=>{ delete b.pre; })); return c; }
+async function flush(){
+  sendTimer = null;
+  if(sending || !dirty || !cryptoKey) return;
+  sending = true; dirty = false;
+  try{
+    const body = await seal({t:"state", s:slim()});
+    const r = await fetch(RELAY+topic(), {method:"POST", body, referrerPolicy:"no-referrer"});
+    if(r.status===429){ dirty = true; setNet("Busy · retrying","warn"); later(10000); }
+    else if(!r.ok) throw new Error("relay " + r.status);
+    else { setNet("Live","live"); $("watchers").textContent = "Live. Viewers get each ball within a second or two."; }
+  }catch(e){ dirty = true; setNet("Offline · will resend","warn"); $("watchers").textContent = "No internet. The latest score is sent as soon as you're back online."; later(4000); }
+  sending = false;
+  if(dirty) later(1200);
 }
+window.addEventListener("online", ()=>{ if(S && !isViewer) broadcast(); });
 
-async function startViewer(id){
+async function startViewer(id, k){
   isViewer = true;
   $("setup").hidden = true; $("boardWrap").hidden = false; $("viewerNote").hidden = false;
   const VKEY = "gullyView-"+id;
-  $("board").innerHTML = `<div class="bteam"><span>Live score</span></div><div class="prev">Waiting for the scorer's phone…</div>`;
+  S = null;
+  $("board").innerHTML = `<div class="bteam"><span>Live score</span></div><div class="prev">Waiting for the scorer's first update…</div>`;
+  try{ cryptoKey = await importKey(k); }catch(e){ setNet("Bad link","bad"); $("viewerMsg").textContent = "This link is incomplete. Ask the scorer to send it again."; return; }
   try{ const c = clean(JSON.parse(localStorage.getItem(VKEY)||"null")); if(c && Date.now()-c.u < TTL){ S=c; render(); } }catch(e){}
   const keep = ()=>{ try{ localStorage.setItem(VKEY, JSON.stringify(S)); }catch(e){} };
   const offline = msg=>{ $("viewerMsg").textContent = (S ? "Showing the last score. " : "") + msg; };
-  if(!window.Peer){ setNet("Unavailable","bad"); $("viewerMsg").textContent="Live view could not load in this browser."; return; }
-  let ended=false, misses=0, conn=null;
-  setNet("Connecting…","warn");
-  peer = new Peer(await peerOpts());
-  const connect = ()=>{
-    if(ended || !peer || peer.destroyed) return;
-    const c = conn = peer.connect(PREFIX+id, {reliable:true});
-    /* a direct link that never opens means the networks are blocking each other: give up after 15 s and try again */
-    const guard = setTimeout(()=>{ if(!c.open && conn===c){ setNet("Can't connect","bad"); offline("Can't reach the scorer's phone on this network. Try Wi-Fi on either phone. Retrying…"); conn=null; try{ c.close(); }catch(e){} setTimeout(connect,2000); } }, 15000);
-    c.on("open",()=>{ clearTimeout(guard); misses=0; setNet("Live","live"); $("viewerMsg").textContent="Watching live. The score updates by itself."; });
-    c.on("data", d=>{
-      if(d && d.type==="state"){ const c=clean(d.s); if(c){ S=c; render(); keep(); } }
-      if(d && d.type==="end"){ ended=true; try{ localStorage.removeItem(VKEY); }catch(e){} setNet("Match ended",""); $("viewerMsg").textContent="The scorer ended this match. Final score shown above."; try{peer.destroy();}catch(e){} }
-    });
-    c.on("close",()=>{ clearTimeout(guard); if(conn!==c) return; if(!ended){ setNet("Scorer away","warn"); offline("The scorer's phone is away. Updates resume when it's back."); setTimeout(connect,3000); } });
-  };
-  peer.on("open", connect);
-  peer.on("error", e=>{
-    if(e.type==="peer-unavailable"){
-      misses++;
-      offline(misses>40 ? "The scorer's phone is offline or the match has ended. Still checking." : "Waiting for the scorer's phone…");
-      setNet(misses>40?"Scorer offline":"Scorer away","warn");
-      setTimeout(connect, misses>40?8000:3000); return;
+  const T = PREFIX + id;
+  let lastU = S ? S.u : 0, ended = false, ws = null, backoff = 2000;
+  const apply = async m=>{
+    if(!m || m.event!=="message" || ended) return;
+    let txt = m.message;
+    if(m.attachment && typeof m.attachment.url==="string" && m.attachment.url.startsWith(RELAY)){
+      try{ txt = await (await fetch(m.attachment.url, {referrerPolicy:"no-referrer"})).text(); }catch(e){ return; }
     }
-    if(e.type==="network" || e.type==="server-error" || e.type==="socket-error"){ setNet("No connection","bad"); offline("No internet on this phone. Retrying…"); setTimeout(()=>location.reload(),8000); }
-  });
-  peer.on("disconnected",()=>{ setTimeout(()=>{ if(peer && !peer.destroyed && !ended) peer.reconnect(); },2000); });
+    let d; try{ d = await unseal(txt); }catch(e){ return; }
+    if(!d) return;
+    if(d.t==="end"){
+      ended = true; try{ localStorage.removeItem(VKEY); }catch(e){}
+      setNet("Match ended",""); $("viewerMsg").textContent = "The scorer ended this match.";
+      try{ ws && ws.close(); }catch(e){} return;
+    }
+    if(d.t==="state"){
+      const c = clean(d.s);
+      if(c && c.u >= lastU){ lastU = c.u; S = c; render(); keep(); setNet("Live","live"); $("viewerMsg").textContent = "Watching live. The score updates by itself."; }
+    }
+  };
+  const poll = async ()=>{
+    try{
+      const r = await fetch(RELAY + T + "/json?poll=1&since=latest", {referrerPolicy:"no-referrer"});
+      const lines = (await r.text()).trim().split("\n").filter(Boolean);
+      for(const l of lines){ try{ await apply(JSON.parse(l)); }catch(e){} }
+      if(!S && !ended){ setNet("Waiting…","warn"); offline("Waiting for the scorer's first update. Updates appear here automatically."); }
+    }catch(e){ setNet("No connection","bad"); offline("No internet on this phone. Retrying…"); }
+  };
+  const open = ()=>{
+    if(ended) return;
+    try{ ws = new WebSocket(RELAY_WS + T + "/ws"); }catch(e){ setTimeout(open, backoff); return; }
+    ws.onopen = ()=>{ backoff = 2000; };
+    ws.onmessage = e=>{ try{ apply(JSON.parse(e.data)); }catch(_){} };
+    ws.onclose = ()=>{ if(ended) return; backoff = Math.min(backoff*2, 30000); setTimeout(()=>{ poll(); open(); }, backoff); };
+  };
+  setNet("Connecting…","warn");
+  await poll(); open();
+  setInterval(()=>{ if(!ended && document.visibilityState==="visible") poll(); }, 30000);
   document.addEventListener("visibilitychange",()=>{
-    if(document.visibilityState!=="visible" || ended || !peer) return;
-    if(peer.destroyed){ location.reload(); return; }
-    if(peer.disconnected){ try{ peer.reconnect(); }catch(e){} }
-    else if(!conn || !conn.open) connect();
+    if(document.visibilityState!=="visible" || ended) return;
+    poll(); if(!ws || ws.readyState > 1) open();
   });
 }
 
 /* ---------- boot ---------- */
-(function boot(){
-  const m = location.hash.match(/^#watch-([a-z0-9]{6,12})$/);
-  if(m){ startViewer(m[1]); return; }
+(async function boot(){
+  const m = location.hash.match(/^#watch-([a-z0-9]{10,24})\.([A-Za-z0-9_-]{22})$/);
+  if(m){ startViewer(m[1], m[2]); return; }
+  if(/^#watch-/.test(location.hash)){ $("setup").hidden = true; $("viewerNote").hidden = false; setNet("Old link","bad"); $("viewerMsg").textContent = "This link is from an older version. Ask the scorer to share the link again."; return; }
   try{
     const saved = JSON.parse(localStorage.getItem(KEY)||"null");
     const c = saved && Date.now()-saved.at < TTL ? clean(saved.S) : null;
-    if(c && c.id){ S = c; startScorer(); return; }
+    if(c && c.id && typeof saved.k==="string" && /^[A-Za-z0-9_-]{22}$/.test(saved.k)){ S = c; K = saved.k; cryptoKey = await importKey(K); startScorer(); return; }
     localStorage.removeItem(KEY);
   }catch(e){}
 })();
