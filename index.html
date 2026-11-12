@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-IbqUHoz/cpzd9flwmjKn8xkfcNqi4ETa0rD5wLTPJVk=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-5t8l1CocHrKNhQeHNmKQrusd78D0emNkNZ20FhxoGXY=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -144,7 +144,7 @@ td .how{display:block;font-size:12px;color:var(--muted)}
         <label for="p1">Team A players<textarea id="p1" placeholder="One name per line"></textarea></label>
         <label for="p2">Team B players<textarea id="p2" placeholder="One name per line"></textarea></label>
       </div>
-      <label id="oneSideLab" for="oneSide" class="chk" hidden><input type="checkbox" id="oneSide"><span><b>One-side batting</b><br>Batters don't change ends. The striker keeps strike after runs and overs.</span></label>
+      <label id="oneSideLab" for="oneSide" class="chk" hidden><input type="checkbox" id="oneSide"><span><b>One-side batting</b><br>One batter at a time, no non-striker. Every player bats, so the team is all out when all are out.</span></label>
       <p id="rosterNote" class="note" hidden>One name per line, 2 to 15 players. Leave a box empty to use Player 1, Player 2 and so on. All out when one batter is left.</p>
       <div class="row2">
         <label for="ov">Overs per side<input id="ov" type="number" inputmode="numeric" min="1" max="50" value="6"></label>
@@ -261,7 +261,7 @@ function stats(inn){
   return {runs,wk,legal,wd,nb};
 }
 const oversTxt = l => Math.floor(l/6) + "." + (l%6);
-const wkts = i => full() ? Math.max(1, S.players[i].length-1) : S.wickets;
+const wkts = i => full() ? Math.max(1, S.players[i].length - (S.oneSide ? 0 : 1)) : S.wickets;
 function target(){ return S.innings[0].done ? stats(S.innings[0]).runs + 1 : null; }
 function inningsOver(i){
   const st = stats(S.innings[i]);
@@ -304,8 +304,11 @@ function outSet(inn){ const o=new Set(); inn.balls.forEach(b=>{ if(b.w && b.out!
 function need(i){
   const inn = S.innings[i];
   if(!full() || inn.done || S.done) return null;
-  if(inn.str==null && inn.non==null) return "open";
-  if(inn.str==null || inn.non==null) return "bat";
+  if(S.oneSide){ if(inn.str==null) return inn.balls.length ? "bat" : "open"; }
+  else {
+    if(inn.str==null && inn.non==null) return "open";
+    if(inn.str==null || inn.non==null) return "bat";
+  }
   if(inn.bw==null) return "bowl";
   return null;
 }
@@ -382,6 +385,7 @@ function render(){
     $("undoBtn").disabled = !!held || (!inn.balls.length && !(i===1 && S.innings[0].balls.length));
     $("breakBox").hidden = !(i===0 && inn.done);
     $("fullTools").hidden = !full() || inn.done || S.done || !!nd;
+    $("swapBtn").hidden = !!S.oneSide;
     $("chgBowl").disabled = inn.bw==null;
     $("wdBtn").classList.toggle("on", pending==="wd"); $("wdBtn").setAttribute("aria-pressed", pending==="wd");
     $("nbBtn").classList.toggle("on", pending==="nb"); $("nbBtn").setAttribute("aria-pressed", pending==="nb");
@@ -440,7 +444,7 @@ function renderPick(nd){
     const add = (txt, out, wt, cls) => { const b=document.createElement("button"); b.className="btn "+(cls||""); b.textContent=txt; b.onclick=()=>finishWicket(out,wt); btns.appendChild(b); };
     add(`${pname(i,inn.str)} out (bowled, caught, lbw, stumped)`, inn.str, "b");
     add(`${pname(i,inn.str)} run out`, inn.str, "r", "ghost");
-    add(`${pname(i,inn.non)} run out`, inn.non, "r", "ghost");
+    if(!S.oneSide && inn.non!=null) add(`${pname(i,inn.non)} run out`, inn.non, "r", "ghost");
     const c=document.createElement("button"); c.className="btn ghost small"; c.textContent="Cancel"; c.onclick=()=>{ held=null; render(); }; btns.appendChild(c);
     box.appendChild(btns); return;
   }
@@ -453,7 +457,7 @@ function renderPick(nd){
   t.textContent = nd==="open" ? `${S.teams[i]} innings: pick the openers and bowler` : nd==="bat" ? "New batter coming in" : "New over: pick the bowler";
   box.appendChild(t);
   const g = document.createElement("div"); g.style.cssText="display:flex;flex-direction:column;gap:10px";
-  if(nd==="open"){ g.appendChild(selectBox("selStr","Striker",i,free)); g.appendChild(selectBox("selNon","Non-striker",i,free)); }
+  if(nd==="open"){ g.appendChild(selectBox("selStr", S.oneSide ? "Batter" : "Striker", i, free)); if(!S.oneSide) g.appendChild(selectBox("selNon","Non-striker",i,free)); }
   else if(nd==="bat") g.appendChild(selectBox("selBat", inn.str==null ? "On strike" : "Non-striker", i, free));
   if(inn.bw==null) g.appendChild(selectBox("selBowl","Bowler ("+S.teams[1-i]+")",1-i,bowlers));
   box.appendChild(g);
@@ -464,11 +468,12 @@ function renderPick(nd){
 function confirmPick(){
   const inn = S.innings[S.cur], v = id => $(id) ? $(id).value : null, err = $("pickErr");
   const a = v("selStr"), b = v("selNon"), c = v("selBat"), d = v("selBowl");
-  if(a!==null && (a==="" || b==="")){ err.textContent="Choose both opening batters."; return; }
-  if(a!==null && a===b){ err.textContent="Striker and non-striker must be different players."; return; }
+  if(a!==null && a===""){ err.textContent = S.oneSide ? "Choose the batter." : "Choose the striker."; return; }
+  if(b!==null && b===""){ err.textContent="Choose the non-striker."; return; }
+  if(b!==null && a===b){ err.textContent="Striker and non-striker must be different players."; return; }
   if(c!==null && c===""){ err.textContent="Choose the new batter."; return; }
   if(d!==null && d===""){ err.textContent="Choose the bowler."; return; }
-  if(a!==null){ inn.str=+a; inn.non=+b; }
+  if(a!==null){ inn.str=+a; inn.non = b!==null ? +b : null; }
   if(c!==null){ if(inn.str==null) inn.str=+c; else inn.non=+c; }
   if(d!==null) inn.bw=+d;
   commit();
