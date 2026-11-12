@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-evwiOnlOaxch35JBc2zD77MkEDBhOFJ4fiz6sFNCmL4=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ylQC35Fxxke5OpZ4lywp1uI+8z4VasqzvgKYREwLxvk=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -93,6 +93,10 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
 .k.wk.on{background:var(--ball);color:#fff}
 .k.undo{grid-column:span 2;font-size:20px;color:var(--muted)}
 .k:disabled{opacity:.35;cursor:not-allowed}
+.chk{flex-direction:row;align-items:flex-start;gap:10px;cursor:pointer;color:var(--ink);font-weight:400;font-size:14px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.chk input{width:20px;height:20px;margin:2px 0 0;flex:none;accent-color:var(--turf)}
+.chk span{color:var(--muted)}
+.chk b{color:var(--ink);font-weight:600}
 .hint{font-size:13px;color:var(--amber)}
 .hint:empty{display:none}
 /* scorecard */
@@ -140,6 +144,7 @@ td .how{display:block;font-size:12px;color:var(--muted)}
         <label for="p1">Team A players<textarea id="p1" placeholder="One name per line"></textarea></label>
         <label for="p2">Team B players<textarea id="p2" placeholder="One name per line"></textarea></label>
       </div>
+      <label id="oneSideLab" for="oneSide" class="chk" hidden><input type="checkbox" id="oneSide"><span><b>One-side batting</b><br>Batters don't change ends. The striker keeps strike after runs and overs.</span></label>
       <p id="rosterNote" class="note" hidden>One name per line, 2 to 15 players. Leave a box empty to use Player 1, Player 2 and so on. All out when one batter is left.</p>
       <div class="row2">
         <label for="ov">Overs per side<input id="ov" type="number" inputmode="numeric" min="1" max="50" value="6"></label>
@@ -275,10 +280,11 @@ function need(i){
 }
 /* move players after a ball: runs crossed, wicket, end of over */
 function advance(inn, ball){
-  if(ball.r % 2 === 1){ [inn.str, inn.non] = [inn.non, inn.str]; }
+  const swap = !S.oneSide;
+  if(swap && ball.r % 2 === 1){ [inn.str, inn.non] = [inn.non, inn.str]; }
   if(ball.w){ if(inn.str===ball.out) inn.str=null; else if(inn.non===ball.out) inn.non=null; }
   if(inn.done) return;
-  if(!ball.x && stats(inn).legal % 6 === 0){ [inn.str, inn.non] = [inn.non, inn.str]; inn.prev = inn.bw; inn.bw = null; }
+  if(!ball.x && stats(inn).legal % 6 === 0){ if(swap) [inn.str, inn.non] = [inn.non, inn.str]; inn.prev = inn.bw; inn.bw = null; }
 }
 
 /* ---------- never trust incoming data: rebuild it from plain numbers and short text ---------- */
@@ -292,7 +298,7 @@ function clean(s){
   if(mode==="full" && (players[0].length<2 || players[1].length<2)) return null;
   const pos = o => o && typeof o==="object" ? {str:ix(o.str), non:ix(o.non), bw:ix(o.bw), prev:ix(o.prev)} : null;
   return {
-    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players,
+    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players, oneSide: mode==="full" && !!s.oneSide,
     teams:s.teams.map(t=>String(t).slice(0,20)),
     overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15),
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
@@ -308,7 +314,7 @@ function render(){
   if(!S) return;
   const i = S.cur, inn = S.innings[i], st = stats(inn), bat = S.teams[i];
   const crr = st.legal ? (st.runs/(st.legal/6)).toFixed(2) : "0.00";
-  let html = `<div class="bteam"><span>${esc(bat)} batting</span><span>${i===0?"1st":"2nd"} innings</span></div>
+  let html = `<div class="bteam"><span>${esc(bat)} batting</span><span>${i===0?"1st":"2nd"} innings${S.oneSide?" · one-side":""}</span></div>
     <div class="score">${st.runs}/${st.wk}<small>${oversTxt(st.legal)} / ${S.overs} ov</small></div>
     <div class="stats"><span><b>${crr}</b>run rate</span>`;
   const t = target();
@@ -474,7 +480,7 @@ $("chgBowl").onclick = ()=>{ const inn=S.innings[S.cur]; inn.bw = null; commit()
 /* ---------- setup ---------- */
 function syncMode(){
   const f = $("mFull").checked;
-  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("wkLab").hidden = f;
+  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("oneSideLab").hidden = !f; $("wkLab").hidden = f;
   $("setupErr").textContent = "";
 }
 $("mQuick").addEventListener("change", syncMode); $("mFull").addEventListener("change", syncMode);
@@ -505,7 +511,7 @@ $("setupForm").addEventListener("submit", e=>{
   const abc="abcdefghjkmnpqrstuvwxyz23456789", rnd=new Uint8Array(10); crypto.getRandomValues(rnd);
   let id=""; for(const v of rnd) id+=abc[v%abc.length];
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
-  S = {id, mode, players, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
+  S = {id, mode, players, oneSide: mode==="full" && $("oneSide").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   startScorer();
 });
 ["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
