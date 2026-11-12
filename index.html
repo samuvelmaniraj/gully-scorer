@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ylQC35Fxxke5OpZ4lywp1uI+8z4VasqzvgKYREwLxvk=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-EgUbLvNb5XF/A4XIh941tFErbWZJOudVRWC2j2J2lZQ=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://0.peerjs.com wss://0.peerjs.com https://*.metered.live; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -220,6 +220,24 @@ td .how{display:block;font-size:12px;color:var(--muted)}
 <script>
 const $ = id => document.getElementById(id);
 const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
+/* Relay for phones on networks that block direct connections (Metered free TURN). Leave empty to connect directly only. */
+const TURN_APP = "", TURN_KEY = "";
+let iceCache = null;
+async function peerOpts(){
+  const o = {debug:0};
+  if(!TURN_APP || !TURN_KEY) return o;
+  try{
+    if(!iceCache){
+      const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), 5000);
+      const r = await fetch(`https://${TURN_APP}.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(TURN_KEY)}`, {signal:ctl.signal, referrerPolicy:"no-referrer"});
+      clearTimeout(t);
+      const list = await r.json();
+      if(Array.isArray(list) && list.length) iceCache = list.filter(s=>s && (typeof s.urls==="string" || Array.isArray(s.urls))).slice(0,8);
+    }
+    if(iceCache) o.config = {iceServers: iceCache};
+  }catch(e){}
+  return o;
+}
 let S = null, pending = null, pw = false, held = null, peer = null, conns = new Set(), isViewer = false, wakeLock = null;
 
 /* ---------- scoring maths (pure) ---------- */
@@ -558,9 +576,9 @@ function setNet(txt, cls){ const n=$("net"); n.textContent=txt; n.className="chi
 function updCount(){ const n=conns.size; $("watchers").textContent = n ? `${n} viewer${n===1?"":"s"} watching live.` : "No viewers yet."; if(peer && peer.open) setNet("Live · "+n+" watching","live"); }
 function broadcast(){ conns.forEach(c=>{ try{ if(c.open) c.send({type:"state", s:S}); }catch(e){} }); }
 let hostTries = 0;
-function host(){
+async function host(){
   if(!window.Peer){ setNet("Offline · scoring only","warn"); $("watchers").textContent="Live sharing could not load here. Scoring still works on this phone."; return; }
-  peer = new Peer(PREFIX+S.id, {debug:0});
+  peer = new Peer(PREFIX+S.id, await peerOpts());
   peer.on("open",()=>{ hostTries=0; updCount(); });
   peer.on("connection", c=>{
     c.on("open",()=>{ conns.add(c); c.send({type:"state", s:S}); updCount(); });
@@ -576,7 +594,7 @@ function host(){
   });
 }
 
-function startViewer(id){
+async function startViewer(id){
   isViewer = true;
   $("setup").hidden = true; $("boardWrap").hidden = false; $("viewerNote").hidden = false;
   const VKEY = "gullyView-"+id;
@@ -587,16 +605,18 @@ function startViewer(id){
   if(!window.Peer){ setNet("Unavailable","bad"); $("viewerMsg").textContent="Live view could not load in this browser."; return; }
   let ended=false, misses=0, conn=null;
   setNet("Connecting…","warn");
-  peer = new Peer({debug:0});
+  peer = new Peer(await peerOpts());
   const connect = ()=>{
     if(ended || !peer || peer.destroyed) return;
-    conn = peer.connect(PREFIX+id, {reliable:true});
-    conn.on("open",()=>{ misses=0; setNet("Live","live"); $("viewerMsg").textContent="Watching live. The score updates by itself."; });
-    conn.on("data", d=>{
+    const c = conn = peer.connect(PREFIX+id, {reliable:true});
+    /* a direct link that never opens means the networks are blocking each other: give up after 15 s and try again */
+    const guard = setTimeout(()=>{ if(!c.open && conn===c){ setNet("Can't connect","bad"); offline("Can't reach the scorer's phone on this network. Try Wi-Fi on either phone. Retrying…"); conn=null; try{ c.close(); }catch(e){} setTimeout(connect,2000); } }, 15000);
+    c.on("open",()=>{ clearTimeout(guard); misses=0; setNet("Live","live"); $("viewerMsg").textContent="Watching live. The score updates by itself."; });
+    c.on("data", d=>{
       if(d && d.type==="state"){ const c=clean(d.s); if(c){ S=c; render(); keep(); } }
       if(d && d.type==="end"){ ended=true; try{ localStorage.removeItem(VKEY); }catch(e){} setNet("Match ended",""); $("viewerMsg").textContent="The scorer ended this match. Final score shown above."; try{peer.destroy();}catch(e){} }
     });
-    conn.on("close",()=>{ if(!ended){ setNet("Scorer away","warn"); offline("The scorer's phone is away. Updates resume when it's back."); setTimeout(connect,3000); } });
+    c.on("close",()=>{ clearTimeout(guard); if(conn!==c) return; if(!ended){ setNet("Scorer away","warn"); offline("The scorer's phone is away. Updates resume when it's back."); setTimeout(connect,3000); } });
   };
   peer.on("open", connect);
   peer.on("error", e=>{
