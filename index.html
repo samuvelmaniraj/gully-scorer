@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-5t8l1CocHrKNhQeHNmKQrusd78D0emNkNZ20FhxoGXY=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-HLnWaeBLJYc6xzUDBAE6LLQxzeevhsrxN57gcCrLkio=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -145,6 +145,7 @@ td .how{display:block;font-size:12px;color:var(--muted)}
         <label for="p2">Team B players<textarea id="p2" placeholder="One name per line"></textarea></label>
       </div>
       <label id="oneSideLab" for="oneSide" class="chk" hidden><input type="checkbox" id="oneSide"><span><b>One-side batting</b><br>One batter at a time, no non-striker. Every player bats, so the team is all out when all are out.</span></label>
+      <label id="lastManLab" for="lastMan" class="chk" hidden><input type="checkbox" id="lastMan"><span><b>Last man bats alone</b><br>Two batters as normal. When one batter is left, he keeps batting alone until he's out.</span></label>
       <p id="rosterNote" class="note" hidden>One name per line, 2 to 15 players. Leave a box empty to use Player 1, Player 2 and so on. All out when one batter is left.</p>
       <div class="row2">
         <label for="ov">Overs per side<input id="ov" type="number" inputmode="numeric" min="1" max="50" value="6"></label>
@@ -261,7 +262,9 @@ function stats(inn){
   return {runs,wk,legal,wd,nb};
 }
 const oversTxt = l => Math.floor(l/6) + "." + (l%6);
-const wkts = i => full() ? Math.max(1, S.players[i].length - (S.oneSide ? 0 : 1)) : S.wickets;
+const wkts = i => full() ? Math.max(1, S.players[i].length - (S.oneSide || S.lastMan ? 0 : 1)) : S.wickets;
+function freeBat(i){ const inn = S.innings[i], outs = outSet(inn); return S.players[i].filter((_,p)=>!outs.has(p) && p!==inn.str && p!==inn.non).length; }
+const aloneNow = i => { const inn = S.innings[i]; return !!S.lastMan && inn.str!=null && inn.non==null && freeBat(i)===0; };
 function target(){ return S.innings[0].done ? stats(S.innings[0]).runs + 1 : null; }
 function inningsOver(i){
   const st = stats(S.innings[i]);
@@ -306,19 +309,22 @@ function need(i){
   if(!full() || inn.done || S.done) return null;
   if(S.oneSide){ if(inn.str==null) return inn.balls.length ? "bat" : "open"; }
   else {
-    if(inn.str==null && inn.non==null) return "open";
-    if(inn.str==null || inn.non==null) return "bat";
+    if(inn.str==null && inn.non==null) return inn.balls.length ? "bat" : "open";
+    if((inn.str==null || inn.non==null) && !aloneNow(i)) return "bat";
   }
   if(inn.bw==null) return "bowl";
   return null;
 }
 /* move players after a ball: runs crossed, wicket, end of over */
 function advance(inn, ball){
-  const swap = !S.oneSide;
-  if(swap && ball.r % 2 === 1){ [inn.str, inn.non] = [inn.non, inn.str]; }
+  const ti = S.innings.indexOf(inn);
+  const swap = () => !S.oneSide && !aloneNow(ti);
+  if(swap() && ball.r % 2 === 1){ [inn.str, inn.non] = [inn.non, inn.str]; }
   if(ball.w){ if(inn.str===ball.out) inn.str=null; else if(inn.non===ball.out) inn.non=null; }
+  /* last man left: he takes strike and bats alone */
+  if(S.lastMan && !inn.done && (inn.str==null) !== (inn.non==null) && freeBat(ti)===0){ inn.str = inn.str!=null ? inn.str : inn.non; inn.non = null; }
   if(inn.done) return;
-  if(!ball.x && stats(inn).legal % 6 === 0){ if(swap) [inn.str, inn.non] = [inn.non, inn.str]; inn.prev = inn.bw; inn.bw = null; }
+  if(!ball.x && stats(inn).legal % 6 === 0){ if(swap()) [inn.str, inn.non] = [inn.non, inn.str]; inn.prev = inn.bw; inn.bw = null; }
 }
 
 /* ---------- never trust incoming data: rebuild it from plain numbers and short text ---------- */
@@ -332,7 +338,7 @@ function clean(s){
   if(mode==="full" && (players[0].length<2 || players[1].length<2)) return null;
   const pos = o => o && typeof o==="object" ? {str:ix(o.str), non:ix(o.non), bw:ix(o.bw), prev:ix(o.prev)} : null;
   return {
-    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players, oneSide: mode==="full" && !!s.oneSide,
+    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players, oneSide: mode==="full" && !!s.oneSide, lastMan: mode==="full" && !s.oneSide && !!s.lastMan,
     teams:s.teams.map(t=>String(t).slice(0,20)),
     overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), wr:s.wr!==false, nr:s.nr!==false,
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
@@ -365,6 +371,7 @@ function render(){
     if(inn.non!=null) w += line(inn.non, false);
     const bp = inn.bw!=null ? inn.bw : (inn.balls.length ? inn.balls[inn.balls.length-1].bw : null);
     if(bp!=null){ const f = bowlFig(inn,bp); w += `<div class="ln bw"><span>Bowling: ${esc(pname(1-i,bp))}</span><span>${oversTxt(f.legal)}-${f.r}-${f.w}</span></div>`; }
+    if(w && aloneNow(i)) w += `<div class="ln bw"><span>Last man batting alone</span></div>`;
     if(w) html += `<div class="who">${w}</div>`;
   }
   const co = currentOver(inn);
@@ -385,7 +392,7 @@ function render(){
     $("undoBtn").disabled = !!held || (!inn.balls.length && !(i===1 && S.innings[0].balls.length));
     $("breakBox").hidden = !(i===0 && inn.done);
     $("fullTools").hidden = !full() || inn.done || S.done || !!nd;
-    $("swapBtn").hidden = !!S.oneSide;
+    $("swapBtn").hidden = !!S.oneSide || aloneNow(i);
     $("chgBowl").disabled = inn.bw==null;
     $("wdBtn").classList.toggle("on", pending==="wd"); $("wdBtn").setAttribute("aria-pressed", pending==="wd");
     $("nbBtn").classList.toggle("on", pending==="nb"); $("nbBtn").setAttribute("aria-pressed", pending==="nb");
@@ -516,10 +523,10 @@ $("chgBowl").onclick = ()=>{ const inn=S.innings[S.cur]; inn.bw = null; commit()
 /* ---------- setup ---------- */
 function syncMode(){
   const f = $("mFull").checked;
-  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("oneSideLab").hidden = !f; $("wkLab").hidden = f;
+  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("oneSideLab").hidden = !f; $("lastManLab").hidden = !f || $("oneSide").checked; $("wkLab").hidden = f;
   $("setupErr").textContent = "";
 }
-$("mQuick").addEventListener("change", syncMode); $("mFull").addEventListener("change", syncMode);
+$("mQuick").addEventListener("change", syncMode); $("mFull").addEventListener("change", syncMode); $("oneSide").addEventListener("change", syncMode);
 $("t1").addEventListener("input",()=>{ $("p1").previousSibling.textContent = ($("t1").value.trim()||"Team A")+" players"; });
 $("t2").addEventListener("input",()=>{ $("p2").previousSibling.textContent = ($("t2").value.trim()||"Team B")+" players"; });
 function roster(text){
@@ -549,7 +556,7 @@ $("setupForm").addEventListener("submit", e=>{
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
   importKey(K).then(k=>{ cryptoKey = k; broadcast(); });
-  S = {id, mode, players, oneSide: mode==="full" && $("oneSide").checked, wr: $("wr").checked, nr: $("nr").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
+  S = {id, mode, players, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   startScorer();
 });
 ["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
