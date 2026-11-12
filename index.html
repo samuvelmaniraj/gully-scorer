@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-epwreB2eWwU+yrvpfEsO+BCZcyM/fz1PhWc++99U1So=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-IbqUHoz/cpzd9flwmjKn8xkfcNqi4ETa0rD5wLTPJVk=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -150,6 +150,8 @@ td .how{display:block;font-size:12px;color:var(--muted)}
         <label for="ov">Overs per side<input id="ov" type="number" inputmode="numeric" min="1" max="50" value="6"></label>
         <label for="wk" id="wkLab">Wickets per side<input id="wk" type="number" inputmode="numeric" min="1" max="14" value="5"></label>
       </div>
+      <label for="wr" class="chk"><input type="checkbox" id="wr" checked><span><b>Wide gives 1 run</b><br>Turn off if a wide is only bowled again, with no run added.</span></label>
+      <label for="nr" class="chk"><input type="checkbox" id="nr" checked><span><b>No-ball gives 1 run</b><br>Turn off if a no-ball is only bowled again, with no run added.</span></label>
       <div id="setupErr" class="err"></div>
       <button class="btn" type="submit">Start match</button>
     </form>
@@ -252,9 +254,10 @@ let S = null, pending = null, pw = false, held = null, isViewer = false, wakeLoc
 
 /* ---------- scoring maths (pure) ---------- */
 const full = () => S.mode === "full";
+const pen = b => b.x==="wd" ? (S.wr===false ? 0 : 1) : b.x==="nb" ? (S.nr===false ? 0 : 1) : 0;
 function stats(inn){
   let runs=0,wk=0,legal=0,wd=0,nb=0;
-  for(const b of inn.balls){ runs += b.r + (b.x?1:0); if(b.w) wk++; if(!b.x) legal++; if(b.x==="wd") wd += 1+b.r; if(b.x==="nb") nb++; }
+  for(const b of inn.balls){ runs += b.r + pen(b); if(b.w) wk++; if(!b.x) legal++; if(b.x==="wd") wd += pen(b)+b.r; if(b.x==="nb") nb += pen(b); }
   return {runs,wk,legal,wd,nb};
 }
 const oversTxt = l => Math.floor(l/6) + "." + (l%6);
@@ -273,7 +276,7 @@ function resultTxt(){
 }
 function ballLabel(b){
   if(b.w){ const p=[]; if(b.x) p.push(b.x==="nb"?"Nb":"Wd"); if(b.r) p.push(b.r); p.push("W"); return p.join("+"); }
-  if(b.x==="wd") return b.r ? (b.r+1)+"wd" : "Wd";
+  if(b.x==="wd") return b.r+pen(b) > 1 ? (b.r+pen(b))+"wd" : "Wd";
   if(b.x==="nb") return b.r ? "Nb+"+b.r : "Nb";
   return b.r===0 ? "•" : String(b.r);
 }
@@ -294,7 +297,7 @@ function batFig(inn, p){
 }
 function bowlFig(inn, p){
   let legal=0,r=0,w=0;
-  for(const x of inn.balls){ if(x.bw!==p) continue; if(!x.x) legal++; r += x.r + (x.x?1:0); if(x.w && x.wt==="b") w++; }
+  for(const x of inn.balls){ if(x.bw!==p) continue; if(!x.x) legal++; r += x.r + pen(x); if(x.w && x.wt==="b") w++; }
   return {legal,r,w};
 }
 function outSet(inn){ const o=new Set(); inn.balls.forEach(b=>{ if(b.w && b.out!=null) o.add(b.out); }); return o; }
@@ -328,7 +331,7 @@ function clean(s){
   return {
     id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players, oneSide: mode==="full" && !!s.oneSide,
     teams:s.teams.map(t=>String(t).slice(0,20)),
-    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15),
+    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), wr:s.wr!==false, nr:s.nr!==false,
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
       balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({
         r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w),
@@ -541,7 +544,7 @@ $("setupForm").addEventListener("submit", e=>{
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
   importKey(K).then(k=>{ cryptoKey = k; broadcast(); });
-  S = {id, mode, players, oneSide: mode==="full" && $("oneSide").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
+  S = {id, mode, players, oneSide: mode==="full" && $("oneSide").checked, wr: $("wr").checked, nr: $("nr").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   startScorer();
 });
 ["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
