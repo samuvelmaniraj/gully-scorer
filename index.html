@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9YkCEVVKYh325KpMlw8y8y6zsn+69l7eXZmeReJoUXQ=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-evwiOnlOaxch35JBc2zD77MkEDBhOFJ4fiz6sFNCmL4=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://0.peerjs.com wss://0.peerjs.com; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -36,17 +36,28 @@ header{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
 h2{font-family:var(--f-display);font-size:20px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin:0;text-wrap:balance}
 label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--muted)}
-input{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
-input:focus-visible,button:focus-visible{outline:2px solid var(--turf);outline-offset:2px}
+input,textarea,select{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+textarea{min-height:120px;resize:vertical;line-height:1.4}
+input:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--turf);outline-offset:2px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.err{color:var(--ball);font-size:13px;min-height:0}
+.row2>*{min-width:0}
+.err{color:var(--ball);font-size:13px}
+.err:empty{display:none}
 button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:manipulation}
 .btn{background:var(--turf);color:#fff;font-weight:600;padding:13px 16px;font-size:16px}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:9px 12px;font-size:14px}
 .btn.danger{background:var(--ball-soft);color:var(--ball)}
 .btn.danger.armed{background:var(--ball);color:#fff}
 .btns{display:flex;flex-wrap:wrap;gap:8px}
 .btns .btn{flex:1 1 auto}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:4px}
+.seg input{position:absolute;opacity:0;width:1px;height:1px}
+.seg label{cursor:pointer;border-radius:9px;padding:8px 10px;color:var(--ink);gap:0}
+.seg label b{font-size:15px}
+.seg label span{font-size:12px;font-weight:400;color:var(--muted)}
+.seg input:checked+label{background:var(--card);box-shadow:0 0 0 1px var(--turf) inset}
+.seg input:focus-visible+label{outline:2px solid var(--turf);outline-offset:2px}
 /* scoreboard */
 .board{background:var(--board);color:var(--board-ink);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
 .bteam{font-size:13px;text-transform:uppercase;letter-spacing:.08em;opacity:.75;display:flex;justify-content:space-between;gap:8px}
@@ -55,6 +66,11 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
 .stats{display:flex;gap:18px;flex-wrap:wrap;font-variant-numeric:tabular-nums;font-size:14px}
 .stats b{font-family:var(--f-display);font-size:20px;font-weight:600;margin-right:4px}
 .target{font-size:14px;background:rgba(255,255,255,.08);border-radius:10px;padding:8px 10px}
+.who{display:flex;flex-direction:column;gap:2px;font-size:15px;font-variant-numeric:tabular-nums;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
+.who .ln{display:flex;justify-content:space-between;gap:10px}
+.who .ln span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.who .on{font-weight:600}
+.who .bw{opacity:.75;font-size:14px;margin-top:2px}
 .over{display:flex;gap:6px;flex-wrap:wrap;min-height:34px;align-items:center}
 .over .lab{font-size:12px;opacity:.6;margin-right:4px;text-transform:uppercase;letter-spacing:.06em}
 .b{min-width:32px;height:32px;padding:0 6px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-display);font-weight:600;font-size:16px;background:rgba(255,255,255,.12)}
@@ -63,6 +79,9 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
 .b.x{background:#B57A12;color:#fff}
 .prev{font-size:13px;opacity:.7}
 .result{font-family:var(--f-display);font-size:24px;font-weight:600;color:#9BE0B8}
+/* pick panel */
+.pick{border-color:var(--turf)}
+.pick .ttl{font-weight:600}
 /* pad */
 .pad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .k{background:var(--card);border:1px solid var(--line);color:var(--ink);font-family:var(--f-display);font-weight:600;font-size:26px;padding:14px 0;border-radius:12px}
@@ -74,13 +93,25 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
 .k.wk.on{background:var(--ball);color:#fff}
 .k.undo{grid-column:span 2;font-size:20px;color:var(--muted)}
 .k:disabled{opacity:.35;cursor:not-allowed}
-.hint{font-size:13px;color:var(--amber);min-height:20px}
+.hint{font-size:13px;color:var(--amber)}
+.hint:empty{display:none}
+/* scorecard */
+details.sc{padding:0}
+details.sc summary{cursor:pointer;padding:14px 16px;font-family:var(--f-display);font-size:18px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.scb{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px}
+.scb h3{margin:0;font-size:15px;font-weight:600}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{font-size:12px;color:var(--muted);font-weight:500}
+td .how{display:block;font-size:12px;color:var(--muted)}
 .share{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 #qr{background:#fff;padding:8px;border-radius:10px;line-height:0}
 #qr img,#qr canvas{width:132px;height:132px}
 .link{font-size:13px;word-break:break-all;color:var(--muted);flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:8px}
 .link code{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);user-select:all}
-.note{font-size:13px;color:var(--muted)}
+.note{font-size:13px;color:var(--muted);margin:0}
 .banner{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--turf-soft);color:var(--turf)}
 @media (prefers-reduced-motion:reduce){.k:active{transform:none}}
 </style>
@@ -96,24 +127,35 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
 
   <section id="setup" class="card">
     <h2>New match</h2>
-    <form id="setupForm" class="card" style="border:none;padding:0">
+    <form id="setupForm" style="display:flex;flex-direction:column;gap:12px">
+      <div class="seg" role="radiogroup" aria-label="Scoring style">
+        <input type="radio" name="mode" id="mQuick" value="quick" checked><label for="mQuick"><b>Quick score</b><span>Just runs and wickets</span></label>
+        <input type="radio" name="mode" id="mFull" value="full"><label for="mFull"><b>Full scorecard</b><span>Player names and figures</span></label>
+      </div>
       <div class="row2">
         <label for="t1">Batting first<input id="t1" placeholder="Team A" value="Team A" maxlength="20"></label>
         <label for="t2">Bowling first<input id="t2" placeholder="Team B" value="Team B" maxlength="20"></label>
       </div>
+      <div id="rosters" class="row2" hidden>
+        <label for="p1">Team A players<textarea id="p1" placeholder="One name per line"></textarea></label>
+        <label for="p2">Team B players<textarea id="p2" placeholder="One name per line"></textarea></label>
+      </div>
+      <p id="rosterNote" class="note" hidden>One name per line, 2 to 15 players. Leave a box empty to use Player 1, Player 2 and so on. All out when one batter is left.</p>
       <div class="row2">
         <label for="ov">Overs per side<input id="ov" type="number" inputmode="numeric" min="1" max="50" value="6"></label>
-        <label for="wk">Wickets per side<input id="wk" type="number" inputmode="numeric" min="1" max="10" value="5"></label>
+        <label for="wk" id="wkLab">Wickets per side<input id="wk" type="number" inputmode="numeric" min="1" max="14" value="5"></label>
       </div>
       <div id="setupErr" class="err"></div>
       <button class="btn" type="submit">Start match</button>
     </form>
-    <p class="note">Keep this page open on the scorer's phone. Viewers watch live through the share link. No sign-up, no names of players, nothing saved online. The match disappears from this phone when you end it.</p>
+    <p class="note">Keep this page open on the scorer's phone. Viewers watch live through the share link. No sign-up and nothing saved online. The match disappears from this phone when you end it.</p>
   </section>
 
   <section id="boardWrap" hidden>
     <div class="board" id="board"></div>
   </section>
+
+  <section id="pick" class="card pick" hidden></section>
 
   <section id="scorer" class="card" hidden>
     <div id="hint" class="hint"></div>
@@ -129,10 +171,19 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
       <button class="k wk" id="wkBtn" aria-pressed="false">Wicket</button>
       <button class="k undo" id="undoBtn">Undo</button>
     </div>
+    <div id="fullTools" class="btns" hidden>
+      <button class="btn ghost small" id="swapBtn">Swap strike</button>
+      <button class="btn ghost small" id="chgBowl">Change bowler</button>
+    </div>
     <div id="breakBox" class="btns" hidden>
       <button class="btn" id="nextInn">Start 2nd innings</button>
     </div>
   </section>
+
+  <details id="scWrap" class="card sc" hidden>
+    <summary>Full scorecard</summary>
+    <div class="scb" id="sc"></div>
+  </details>
 
   <section id="shareCard" class="card" hidden>
     <h2>Share live score</h2>
@@ -164,24 +215,26 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
 <script>
 const $ = id => document.getElementById(id);
 const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
-let S = null, pending = null, pw = false, peer = null, conns = new Set(), isViewer = false, wakeLock = null;
+let S = null, pending = null, pw = false, held = null, peer = null, conns = new Set(), isViewer = false, wakeLock = null;
 
 /* ---------- scoring maths (pure) ---------- */
+const full = () => S.mode === "full";
 function stats(inn){
-  let runs=0,wk=0,legal=0;
-  for(const b of inn.balls){ runs += b.r + (b.x?1:0); if(b.w) wk++; if(!b.x) legal++; }
-  return {runs,wk,legal};
+  let runs=0,wk=0,legal=0,wd=0,nb=0;
+  for(const b of inn.balls){ runs += b.r + (b.x?1:0); if(b.w) wk++; if(!b.x) legal++; if(b.x==="wd") wd += 1+b.r; if(b.x==="nb") nb++; }
+  return {runs,wk,legal,wd,nb};
 }
 const oversTxt = l => Math.floor(l/6) + "." + (l%6);
+const wkts = i => full() ? Math.max(1, S.players[i].length-1) : S.wickets;
 function target(){ return S.innings[0].done ? stats(S.innings[0]).runs + 1 : null; }
 function inningsOver(i){
   const st = stats(S.innings[i]);
-  if(st.legal >= S.overs*6 || st.wk >= S.wickets) return true;
+  if(st.legal >= S.overs*6 || st.wk >= wkts(i)) return true;
   return i===1 && st.runs >= target();
 }
 function resultTxt(){
   const t = target(), s2 = stats(S.innings[1]), A = S.teams[0], B = S.teams[1];
-  if(s2.runs >= t){ const left = S.wickets - s2.wk; return `${B} won by ${left} wicket${left===1?"":"s"}`; }
+  if(s2.runs >= t){ const left = wkts(1) - s2.wk; return `${B} won by ${left} wicket${left===1?"":"s"}`; }
   if(s2.runs === t-1) return "Match tied";
   const by = t-1-s2.runs; return `${A} won by ${by} run${by===1?"":"s"}`;
 }
@@ -196,17 +249,56 @@ function currentOver(inn){
   inn.balls.forEach(b=>{ const idx=Math.floor(legal/6); if(!b.x) legal++; out.push([idx,b]); last=idx; });
   return {idx:last, balls: out.filter(o=>o[0]===last).map(o=>o[1])};
 }
+/* players: batting team of innings i is team i, bowling team is the other */
+const pname = (team, p) => (S.players[team] && S.players[team][p]) || "Player " + (p+1);
+function batFig(inn, p){
+  let r=0,b=0,f=0,s=0,out=null;
+  for(const x of inn.balls){
+    if(x.s===p && x.x!=="wd"){ r+=x.r; b++; if(x.r===4) f++; if(x.r===6) s++; }
+    if(x.w && x.out===p) out=x;
+  }
+  return {r,b,f,s,out};
+}
+function bowlFig(inn, p){
+  let legal=0,r=0,w=0;
+  for(const x of inn.balls){ if(x.bw!==p) continue; if(!x.x) legal++; r += x.r + (x.x?1:0); if(x.w && x.wt==="b") w++; }
+  return {legal,r,w};
+}
+function outSet(inn){ const o=new Set(); inn.balls.forEach(b=>{ if(b.w && b.out!=null) o.add(b.out); }); return o; }
+function need(i){
+  const inn = S.innings[i];
+  if(!full() || inn.done || S.done) return null;
+  if(inn.str==null && inn.non==null) return "open";
+  if(inn.str==null || inn.non==null) return "bat";
+  if(inn.bw==null) return "bowl";
+  return null;
+}
+/* move players after a ball: runs crossed, wicket, end of over */
+function advance(inn, ball){
+  if(ball.r % 2 === 1){ [inn.str, inn.non] = [inn.non, inn.str]; }
+  if(ball.w){ if(inn.str===ball.out) inn.str=null; else if(inn.non===ball.out) inn.non=null; }
+  if(inn.done) return;
+  if(!ball.x && stats(inn).legal % 6 === 0){ [inn.str, inn.non] = [inn.non, inn.str]; inn.prev = inn.bw; inn.bw = null; }
+}
 
 /* ---------- never trust incoming data: rebuild it from plain numbers and short text ---------- */
 function clean(s){
   const n=(v,max)=>{ v=Math.floor(+v); return Number.isFinite(v)&&v>=0&&v<=max ? v : 0; };
+  const ix=v=>Number.isInteger(v)&&v>=0&&v<=14 ? v : null;
+  const names=a=>Array.isArray(a) ? a.slice(0,15).map(t=>String(t).slice(0,20)) : [];
   if(!s || !Array.isArray(s.teams) || s.teams.length!==2 || !Array.isArray(s.innings) || s.innings.length!==2) return null;
+  const mode = s.mode==="full" ? "full" : "quick";
+  const players = mode==="full" && Array.isArray(s.players) ? [names(s.players[0]), names(s.players[1])] : [[],[]];
+  if(mode==="full" && (players[0].length<2 || players[1].length<2)) return null;
+  const pos = o => o && typeof o==="object" ? {str:ix(o.str), non:ix(o.non), bw:ix(o.bw), prev:ix(o.prev)} : null;
   return {
-    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12),
+    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players,
     teams:s.teams.map(t=>String(t).slice(0,20)),
-    overs:n(s.overs,50)||1, wickets:n(s.wickets,10)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15),
-    innings:s.innings.map(inn=>({ done:!!(inn&&inn.done),
-      balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({ r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w) })) }))
+    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15),
+    innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
+      balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({
+        r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w),
+        s:ix(b&&b.s), bw:ix(b&&b.bw), out:ix(b&&b.out), wt:b&&b.wt==="r"?"r":b&&b.wt==="b"?"b":null, pre:pos(b&&b.pre) })) }))
   };
 }
 
@@ -226,6 +318,15 @@ function render(){
     html += `<span><b>${rrr}</b>required</span></div>`;
     if(!S.done) html += `<div class="target">${esc(bat)} need <b>${need}</b> from <b>${ballsLeft}</b> ball${ballsLeft===1?"":"s"} (target ${t})</div>`;
   } else html += `</div>`;
+  if(full() && !inn.done){
+    const line = (p, on) => { const f = batFig(inn,p); return `<div class="ln ${on?"on":""}"><span>${esc(pname(i,p))}${on?" *":""}</span><span>${f.r} (${f.b})</span></div>`; };
+    let w = "";
+    if(inn.str!=null) w += line(inn.str, true);
+    if(inn.non!=null) w += line(inn.non, false);
+    const bp = inn.bw!=null ? inn.bw : (inn.balls.length ? inn.balls[inn.balls.length-1].bw : null);
+    if(bp!=null){ const f = bowlFig(inn,bp); w += `<div class="ln bw"><span>Bowling: ${esc(pname(1-i,bp))}</span><span>${oversTxt(f.legal)}-${f.r}-${f.w}</span></div>`; }
+    if(w) html += `<div class="who">${w}</div>`;
+  }
   const co = currentOver(inn);
   html += `<div class="over"><span class="lab">${co.idx<0?"This over":"Over "+(co.idx+1)}</span>` +
     (co.balls.length ? co.balls.map(b=>{
@@ -236,12 +337,15 @@ function render(){
   else if(i===0 && inn.done) html += `<div class="result">Innings break · target ${target()}</div>`;
   if(isViewer && S.u) html += `<div class="prev">Last updated ${new Date(S.u).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</div>`;
   $("board").innerHTML = html;
+  renderCard();
 
   if(!isViewer){
-    const locked = S.done || inn.done;
+    const nd = need(i), locked = S.done || inn.done || !!nd || !!held;
     document.querySelectorAll("#pad button").forEach(b=>{ if(b.id!=="undoBtn") b.disabled = locked; });
-    $("undoBtn").disabled = !inn.balls.length && !(i===1 && !S.innings[1].balls.length);
+    $("undoBtn").disabled = !!held || (!inn.balls.length && !(i===1 && S.innings[0].balls.length));
     $("breakBox").hidden = !(i===0 && inn.done);
+    $("fullTools").hidden = !full() || inn.done || S.done || !!nd;
+    $("chgBowl").disabled = inn.bw==null;
     $("wdBtn").classList.toggle("on", pending==="wd"); $("wdBtn").setAttribute("aria-pressed", pending==="wd");
     $("nbBtn").classList.toggle("on", pending==="nb"); $("nbBtn").setAttribute("aria-pressed", pending==="nb");
     $("wkBtn").classList.toggle("on", pw); $("wkBtn").setAttribute("aria-pressed", pw);
@@ -249,23 +353,114 @@ function render(){
     $("hint").textContent = pw ? (ex ? ex+" + wicket: tap runs completed before the run out" : "Wicket: tap runs completed before the out (0 if bowled or caught)") :
       pending==="wd" ? "Wide: tap extra runs taken (0 for just the wide)" :
       pending==="nb" ? "No-ball: tap runs off the bat (0 if none)" : "";
+    renderPick(nd);
   }
+}
+
+function renderCard(){
+  if(!full()){ $("scWrap").hidden = true; return; }
+  $("scWrap").hidden = false;
+  let h = "";
+  [0,1].forEach(i=>{
+    const inn = S.innings[i]; if(!inn.balls.length && inn.str==null) return;
+    const st = stats(inn);
+    h += `<h3>${esc(S.teams[i])} ${st.runs}/${st.wk} (${oversTxt(st.legal)} ov)</h3>`;
+    const batted = [];
+    inn.balls.forEach(b=>{ if(b.s!=null && !batted.includes(b.s)) batted.push(b.s); if(b.out!=null && !batted.includes(b.out)) batted.push(b.out); });
+    [inn.str, inn.non].forEach(p=>{ if(p!=null && !batted.includes(p)) batted.push(p); });
+    h += `<div class="tw"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th></tr></thead><tbody>`;
+    batted.forEach(p=>{
+      const f = batFig(inn,p);
+      const how = f.out ? (f.out.wt==="r" ? "run out" : "b " + pname(1-i, f.out.bw)) : (!inn.done && (p===inn.str||p===inn.non) ? "batting" : "not out");
+      h += `<tr><td>${esc(pname(i,p))}<span class="how">${esc(how)}</span></td><td>${f.r}</td><td>${f.b}</td><td>${f.f}</td><td>${f.s}</td></tr>`;
+    });
+    h += `<tr><td>Extras</td><td colspan="4">${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})</td></tr></tbody></table></div>`;
+    const bowled = []; inn.balls.forEach(b=>{ if(b.bw!=null && !bowled.includes(b.bw)) bowled.push(b.bw); });
+    if(bowled.length){
+      h += `<div class="tw"><table><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr></thead><tbody>`;
+      bowled.forEach(p=>{ const f = bowlFig(inn,p); const ec = f.legal ? (f.r/(f.legal/6)).toFixed(1) : "–";
+        h += `<tr><td>${esc(pname(1-i,p))}</td><td>${oversTxt(f.legal)}</td><td>${f.r}</td><td>${f.w}</td><td>${ec}</td></tr>`; });
+      h += `</tbody></table></div>`;
+    }
+  });
+  $("sc").innerHTML = h || `<p class="note">The scorecard fills in as the match goes on.</p>`;
+}
+
+/* selection panel for openers, new batter, new bowler, and how a batter got out */
+function opt(sel, value, text){ const o=document.createElement("option"); o.value=value; o.textContent=text; sel.appendChild(o); }
+function selectBox(id, label, team, list){
+  const l = document.createElement("label"); l.htmlFor = id; l.textContent = label;
+  const s = document.createElement("select"); s.id = id; opt(s, "", "Choose…");
+  list.forEach(p=>opt(s, p, pname(team,p))); l.appendChild(s); return l;
+}
+function renderPick(nd){
+  const box = $("pick");
+  if(held){
+    const inn = S.innings[S.cur], i = S.cur;
+    box.hidden = false; box.innerHTML = "";
+    const t = document.createElement("div"); t.className="ttl"; t.textContent = "How was the batter out?"; box.appendChild(t);
+    const btns = document.createElement("div"); btns.className = "btns";
+    const add = (txt, out, wt, cls) => { const b=document.createElement("button"); b.className="btn "+(cls||""); b.textContent=txt; b.onclick=()=>finishWicket(out,wt); btns.appendChild(b); };
+    add(`${pname(i,inn.str)} out (bowled, caught, lbw, stumped)`, inn.str, "b");
+    add(`${pname(i,inn.str)} run out`, inn.str, "r", "ghost");
+    add(`${pname(i,inn.non)} run out`, inn.non, "r", "ghost");
+    const c=document.createElement("button"); c.className="btn ghost small"; c.textContent="Cancel"; c.onclick=()=>{ held=null; render(); }; btns.appendChild(c);
+    box.appendChild(btns); return;
+  }
+  if(!nd){ box.hidden = true; box.innerHTML = ""; return; }
+  const i = S.cur, inn = S.innings[i], outs = outSet(inn);
+  const free = S.players[i].map((_,p)=>p).filter(p=>!outs.has(p) && p!==inn.str && p!==inn.non);
+  const bowlers = S.players[1-i].map((_,p)=>p).filter(p=> S.players[1-i].length<2 || p!==inn.prev);
+  box.hidden = false; box.innerHTML = "";
+  const t = document.createElement("div"); t.className="ttl";
+  t.textContent = nd==="open" ? `${S.teams[i]} innings: pick the openers and bowler` : nd==="bat" ? "New batter coming in" : "New over: pick the bowler";
+  box.appendChild(t);
+  const g = document.createElement("div"); g.style.cssText="display:flex;flex-direction:column;gap:10px";
+  if(nd==="open"){ g.appendChild(selectBox("selStr","Striker",i,free)); g.appendChild(selectBox("selNon","Non-striker",i,free)); }
+  else if(nd==="bat") g.appendChild(selectBox("selBat", inn.str==null ? "On strike" : "Non-striker", i, free));
+  if(inn.bw==null) g.appendChild(selectBox("selBowl","Bowler ("+S.teams[1-i]+")",1-i,bowlers));
+  box.appendChild(g);
+  const err = document.createElement("div"); err.className="err"; err.id="pickErr"; box.appendChild(err);
+  const ok = document.createElement("button"); ok.className="btn"; ok.textContent="Confirm"; ok.onclick=confirmPick; box.appendChild(ok);
+  box.querySelectorAll("select").forEach(s=>s.addEventListener("change",()=>err.textContent=""));
+}
+function confirmPick(){
+  const inn = S.innings[S.cur], v = id => $(id) ? $(id).value : null, err = $("pickErr");
+  const a = v("selStr"), b = v("selNon"), c = v("selBat"), d = v("selBowl");
+  if(a!==null && (a==="" || b==="")){ err.textContent="Choose both opening batters."; return; }
+  if(a!==null && a===b){ err.textContent="Striker and non-striker must be different players."; return; }
+  if(c!==null && c===""){ err.textContent="Choose the new batter."; return; }
+  if(d!==null && d===""){ err.textContent="Choose the bowler."; return; }
+  if(a!==null){ inn.str=+a; inn.non=+b; }
+  if(c!==null){ if(inn.str==null) inn.str=+c; else inn.non=+c; }
+  if(d!==null) inn.bw=+d;
+  commit();
 }
 
 /* ---------- scorer actions ---------- */
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify({at:Date.now(), S})); }catch(e){} }
 function commit(){ S.u = Date.now(); save(); render(); broadcast(); }
-function addBall(r){
-  const inn = S.innings[S.cur]; if(S.done || inn.done) return;
-  inn.balls.push({r, x:pending, w:pw}); pending = null; pw = false;
+function push(ball){
+  const inn = S.innings[S.cur];
+  if(full()){ ball.pre = {str:inn.str, non:inn.non, bw:inn.bw, prev:inn.prev}; ball.s = inn.str; ball.bw = inn.bw; }
+  inn.balls.push(ball); pending = null; pw = false;
   if(inningsOver(S.cur)){ inn.done = true; if(S.cur===1) S.done = true; }
+  if(full()) advance(inn, ball);
   commit();
 }
+function addBall(r){
+  const inn = S.innings[S.cur]; if(S.done || inn.done || need(S.cur)) return;
+  const ball = {r, x:pending, w:pw};
+  if(pw && full()){ held = ball; render(); return; }
+  push(ball);
+}
+function finishWicket(out, wt){ const b = held; held = null; b.out = out; b.wt = wt; push(b); }
 function undo(){
   let inn = S.innings[S.cur];
-  if(!inn.balls.length && S.cur===1){ S.cur = 0; inn = S.innings[0]; }
+  if(!inn.balls.length && S.cur===1){ Object.assign(inn,{str:null,non:null,bw:null,prev:null}); S.cur = 0; inn = S.innings[0]; }
   if(!inn.balls.length) return;
-  inn.balls.pop(); inn.done = false; S.done = false; pending = null; pw = false; commit();
+  const b = inn.balls.pop(); if(b.pre) Object.assign(inn, b.pre);
+  inn.done = false; S.done = false; pending = null; pw = false; held = null; commit();
 }
 document.querySelectorAll("#pad [data-r]").forEach(b=> b.addEventListener("click",()=>addBall(+b.dataset.r)));
 $("wdBtn").onclick = ()=>{ pending = pending==="wd"?null:"wd"; render(); };
@@ -273,20 +468,47 @@ $("nbBtn").onclick = ()=>{ pending = pending==="nb"?null:"nb"; render(); };
 $("wkBtn").onclick = ()=>{ pw = !pw; render(); };
 $("undoBtn").onclick = undo;
 $("nextInn").onclick = ()=>{ S.cur = 1; commit(); };
+$("swapBtn").onclick = ()=>{ const inn=S.innings[S.cur]; [inn.str,inn.non]=[inn.non,inn.str]; commit(); };
+$("chgBowl").onclick = ()=>{ const inn=S.innings[S.cur]; inn.bw = null; commit(); };
 
+/* ---------- setup ---------- */
+function syncMode(){
+  const f = $("mFull").checked;
+  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("wkLab").hidden = f;
+  $("setupErr").textContent = "";
+}
+$("mQuick").addEventListener("change", syncMode); $("mFull").addEventListener("change", syncMode);
+$("t1").addEventListener("input",()=>{ $("p1").previousSibling.textContent = ($("t1").value.trim()||"Team A")+" players"; });
+$("t2").addEventListener("input",()=>{ $("p2").previousSibling.textContent = ($("t2").value.trim()||"Team B")+" players"; });
+function roster(text){
+  const list = text.split("\n").map(s=>s.trim().slice(0,20)).filter(Boolean);
+  return list.length ? list : ["Player 1","Player 2","Player 3","Player 4","Player 5","Player 6"];
+}
 $("setupForm").addEventListener("submit", e=>{
   e.preventDefault();
+  const fail = m => { $("setupErr").textContent = m; };
+  const mode = $("mFull").checked ? "full" : "quick";
   const t1=$("t1").value.trim(), t2=$("t2").value.trim(), ov=+$("ov").value, wk=+$("wk").value;
-  if(!t1 || !t2){ $("setupErr").textContent="Enter both team names."; return; }
-  if(t1.toLowerCase()===t2.toLowerCase()){ $("setupErr").textContent="Team names must be different."; return; }
-  if(!(ov>=1 && ov<=50)){ $("setupErr").textContent="Overs must be between 1 and 50."; return; }
-  if(!(wk>=1 && wk<=10)){ $("setupErr").textContent="Wickets must be between 1 and 10."; return; }
+  if(!t1 || !t2) return fail("Enter both team names.");
+  if(t1.toLowerCase()===t2.toLowerCase()) return fail("Team names must be different.");
+  if(!(ov>=1 && ov<=50)) return fail("Overs must be between 1 and 50.");
+  let players = [[],[]];
+  if(mode==="full"){
+    players = [roster($("p1").value), roster($("p2").value)];
+    for(const [k,list] of players.entries()){
+      const tn = k ? t2 : t1;
+      if(list.length<2) return fail(`${tn} needs at least 2 players.`);
+      if(list.length>15) return fail(`${tn} has more than 15 players.`);
+      if(new Set(list.map(s=>s.toLowerCase())).size!==list.length) return fail(`${tn} has the same name twice. Make each name different.`);
+    }
+  } else if(!(wk>=1 && wk<=14)) return fail("Wickets must be between 1 and 14.");
   const abc="abcdefghjkmnpqrstuvwxyz23456789", rnd=new Uint8Array(10); crypto.getRandomValues(rnd);
   let id=""; for(const v of rnd) id+=abc[v%abc.length];
-  S = {id, teams:[t1,t2], overs:ov, wickets:wk, cur:0, done:false, innings:[{balls:[],done:false},{balls:[],done:false}]};
+  const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
+  S = {id, mode, players, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   startScorer();
 });
-["t1","t2","ov","wk"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
+["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
 
 let armT = null;
 $("endBtn").onclick = ()=>{
