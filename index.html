@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-HLnWaeBLJYc6xzUDBAE6LLQxzeevhsrxN57gcCrLkio=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6AG3ZgGtR9Bc9vu4aF9DrXhDKQBoV24UBwjq3NWTJGQ=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -117,7 +117,15 @@ td .how{display:block;font-size:12px;color:var(--muted)}
 .link code{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);user-select:all}
 .note{font-size:13px;color:var(--muted);margin:0}
 .banner{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--turf-soft);color:var(--turf)}
-@media (prefers-reduced-motion:reduce){.k:active{transform:none}}
+details.toss{background:var(--bg);border:1px solid var(--line);border-radius:10px}
+details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(--ink)}
+.tossIn{padding:0 12px 12px;display:flex;flex-direction:column;gap:10px}
+.coinRow{display:flex;align-items:center;gap:12px}
+.coin{width:56px;height:56px;border-radius:50%;flex:none;display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:26px;background:var(--amber-soft);color:var(--amber);border:2px solid var(--amber)}
+.coin.spin{animation:flip .9s ease-out}
+@keyframes flip{from{transform:rotateY(0)}to{transform:rotateY(1800deg)}}
+.tmsg{margin:0;font-size:15px;color:var(--ink)}
+@media (prefers-reduced-motion:reduce){.k:active{transform:none}.coin.spin{animation:none}}
 </style>
 </head>
 <body>
@@ -140,6 +148,21 @@ td .how{display:block;font-size:12px;color:var(--muted)}
         <label for="t1">Batting first<input id="t1" placeholder="Team A" value="Team A" maxlength="20"></label>
         <label for="t2">Bowling first<input id="t2" placeholder="Team B" value="Team B" maxlength="20"></label>
       </div>
+      <details id="tossBox" class="toss">
+        <summary>Toss the coin</summary>
+        <div class="tossIn">
+          <label for="caller">Who calls?<select id="caller"></select></label>
+          <div class="btns" id="callBtns">
+            <button type="button" class="btn ghost" data-call="H">Heads</button>
+            <button type="button" class="btn ghost" data-call="T">Tails</button>
+          </div>
+          <div class="coinRow"><div id="coin" class="coin" aria-hidden="true">?</div><p id="tossMsg" class="tmsg" aria-live="polite">Pick who calls, then tap Heads or Tails.</p></div>
+          <div id="choose" class="btns" hidden>
+            <button type="button" class="btn" id="chBat">Bat first</button>
+            <button type="button" class="btn ghost" id="chBowl">Bowl first</button>
+          </div>
+        </div>
+      </details>
       <div id="rosters" class="row2" hidden>
         <label for="p1">Team A players<textarea id="p1" placeholder="One name per line"></textarea></label>
         <label for="p2">Team B players<textarea id="p2" placeholder="One name per line"></textarea></label>
@@ -338,7 +361,7 @@ function clean(s){
   if(mode==="full" && (players[0].length<2 || players[1].length<2)) return null;
   const pos = o => o && typeof o==="object" ? {str:ix(o.str), non:ix(o.non), bw:ix(o.bw), prev:ix(o.prev)} : null;
   return {
-    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players, oneSide: mode==="full" && !!s.oneSide, lastMan: mode==="full" && !s.oneSide && !!s.lastMan,
+    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: mode==="full" && !s.oneSide && !!s.lastMan,
     teams:s.teams.map(t=>String(t).slice(0,20)),
     overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), wr:s.wr!==false, nr:s.nr!==false,
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
@@ -379,6 +402,7 @@ function render(){
     (co.balls.length ? co.balls.map(b=>{
       const c = b.w?"w":b.x?"x":b.r===4?"four":b.r===6?"six":"";
       return `<span class="b ${c}">${ballLabel(b)}</span>`; }).join("") : `<span class="prev">Waiting for first ball</span>`) + `</div>`;
+  if(i===0 && S.toss) html += `<div class="prev">${esc(S.toss)}</div>`;
   if(i===1){ const p = stats(S.innings[0]); html += `<div class="prev">${esc(S.teams[0])}: ${p.runs}/${p.wk} (${oversTxt(p.legal)} ov)</div>`; }
   if(S.done) html += `<div class="result">${esc(resultTxt())}</div>`;
   else if(i===0 && inn.done) html += `<div class="result">Innings break · target ${target()}</div>`;
@@ -520,6 +544,45 @@ $("nextInn").onclick = ()=>{ S.cur = 1; commit(); };
 $("swapBtn").onclick = ()=>{ const inn=S.innings[S.cur]; [inn.str,inn.non]=[inn.non,inn.str]; commit(); };
 $("chgBowl").onclick = ()=>{ const inn=S.innings[S.cur]; inn.bw = null; commit(); };
 
+/* ---------- toss ---------- */
+let tossText = "", tossWin = null;
+const teamNames = () => [$("t1").value.trim() || "Team A", $("t2").value.trim() || "Team B"];
+function fillCaller(){
+  const s = $("caller"), v = s.value || "0"; s.innerHTML = "";
+  teamNames().forEach((n,i)=>opt(s, i, n)); s.value = v;
+}
+fillCaller();
+["t1","t2"].forEach(id=>$(id).addEventListener("input", fillCaller));
+document.querySelectorAll("[data-call]").forEach(b=>b.addEventListener("click",()=>{
+  const call = b.dataset.call, side = (crypto.getRandomValues(new Uint8Array(1))[0] & 1) ? "H" : "T";
+  const caller = +$("caller").value, names = teamNames();
+  tossWin = call===side ? caller : 1-caller; tossText = "";
+  const coin = $("coin"), reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelectorAll("[data-call]").forEach(x=>x.disabled = true);
+  $("choose").hidden = true; coin.textContent = "?"; $("tossMsg").textContent = "Flipping…";
+  coin.classList.remove("spin"); void coin.offsetWidth; coin.classList.add("spin");
+  setTimeout(()=>{
+    coin.textContent = side; coin.classList.remove("spin");
+    $("tossMsg").textContent = `${side==="H"?"Heads":"Tails"}! ${names[tossWin]} won the toss.`;
+    $("chBat").textContent = `${names[tossWin]} bat first`; $("chBowl").textContent = `${names[tossWin]} bowl first`;
+    $("choose").hidden = false;
+    document.querySelectorAll("[data-call]").forEach(x=>x.disabled = false);
+  }, reduce ? 50 : 900);
+}));
+function tossChoice(bat){
+  const names = teamNames(), name = names[tossWin];
+  if((tossWin===1) === bat){
+    [$("t1").value, $("t2").value] = [$("t2").value, $("t1").value];
+    [$("p1").value, $("p2").value] = [$("p2").value, $("p1").value];
+    ["t1","t2"].forEach(id=>$(id).dispatchEvent(new Event("input")));
+  }
+  tossText = `${name} won the toss and chose to ${bat ? "bat" : "bowl"}`;
+  $("tossMsg").textContent = tossText + ". Teams are set below.";
+  $("choose").hidden = true;
+}
+$("chBat").onclick = ()=>tossChoice(true);
+$("chBowl").onclick = ()=>tossChoice(false);
+
 /* ---------- setup ---------- */
 function syncMode(){
   const f = $("mFull").checked;
@@ -556,7 +619,7 @@ $("setupForm").addEventListener("submit", e=>{
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
   importKey(K).then(k=>{ cryptoKey = k; broadcast(); });
-  S = {id, mode, players, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
+  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   startScorer();
 });
 ["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
