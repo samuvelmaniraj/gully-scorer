@@ -1,4 +1,4 @@
-/* Gully Scorer relay: passes encrypted, signed score updates from the scorer's phone to viewers.
+/* Gully Scorer relay (deployed by GitHub Actions): passes encrypted, signed score updates from the scorer's phone to viewers.
    It never sees the score: messages are encrypted on the phone and the key stays in the link.
    Each match keeps only its latest message, deleted 12 hours after the last update. */
 import { DurableObject } from "cloudflare:workers";
