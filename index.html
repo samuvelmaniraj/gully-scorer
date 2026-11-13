@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-f4nOrFHsH9vPsMVXV1Mv0hlw7p08wVRdI+J4cwlxUkg=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-oZxhSQQY48fwJWYhtTb/8u3syKCdZX7/e0P94DolTVQ=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -151,6 +151,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
         <label for="t1">Batting first<input id="t1" placeholder="Team A" value="Team A" maxlength="20"></label>
         <label for="t2">Bowling first<input id="t2" placeholder="Team B" value="Team B" maxlength="20"></label>
       </div>
+      <button type="button" class="btn ghost small" id="swapTeams">Swap batting order</button>
       <details id="tossBox" class="toss">
         <summary>Toss the coin</summary>
         <div class="tossIn">
@@ -743,6 +744,19 @@ function loadSettings(){
   syncMode(); $("savedNote").hidden = false;
 }
 $("resetSet").onclick = ()=>{ try{ localStorage.removeItem(SETKEY); }catch(e){} location.reload(); };
+$("swapTeams").onclick = ()=>{
+  [$("t1").value, $("t2").value] = [$("t2").value, $("t1").value];
+  [$("p1").value, $("p2").value] = [$("p2").value, $("p1").value];
+  ["t1","t2"].forEach(id=>$(id).dispatchEvent(new Event("input")));
+};
+/* a phone that takes over scoring also keeps the match settings for the next match */
+function keepSettingsFrom(m){
+  try{
+    const o = {mode:m.mode, t1:m.teams[0], t2:m.teams[1], p1:(m.players[0]||[]).join("\n"), p2:(m.players[1]||[]).join("\n"),
+      ov:String(m.overs), wk:String(m.wickets), oneSide:!!m.oneSide, lastMan:!!m.lastMan, wr:m.wr!==false, nr:m.nr!==false, simple:!!m.simple};
+    localStorage.setItem(SETKEY, JSON.stringify(o));
+  }catch(e){}
+}
 loadSettings();
 
 let armT = null;
@@ -876,7 +890,7 @@ async function takeOver(id, k, x, y, d){
   const c = got && got.t==="state" ? clean(got.s) : null;
   if(!c || c.id!==id){ setNet("Not found","bad"); $("viewerMsg").textContent = "Couldn't load this match yet. Ask the scorer to keep their screen open for a few seconds, then open the handover link again."; return; }
   history.replaceState(null, "", location.pathname + location.search);
-  S = c; startScorer(true);
+  S = c; keepSettingsFrom(c); startScorer(true);
   setNet("You're scoring","live");
 }
 
