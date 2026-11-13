@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6AG3ZgGtR9Bc9vu4aF9DrXhDKQBoV24UBwjq3NWTJGQ=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0+9sNvjub5YE56rZg29SPi8BizGhZjzZ8htVXsE9Crk=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -111,8 +111,9 @@ th:first-child,td:first-child{text-align:left;white-space:normal}
 th{font-size:12px;color:var(--muted);font-weight:500}
 td .how{display:block;font-size:12px;color:var(--muted)}
 .share{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-#qr{background:#fff;padding:8px;border-radius:10px;line-height:0}
-#qr img,#qr canvas{width:132px;height:132px}
+#qr,#qr2{background:#fff;padding:8px;border-radius:10px;line-height:0}
+#qr img,#qr canvas,#qr2 img,#qr2 canvas{width:132px;height:132px}
+.warnTxt{color:var(--ball)}
 .link{font-size:13px;word-break:break-all;color:var(--muted);flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:8px}
 .link code{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);user-select:all}
 .note{font-size:13px;color:var(--muted);margin:0}
@@ -229,8 +230,33 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
       </div>
     </div>
     <p class="note" id="watchers">Sending live updates…</p>
-    <p class="note">Works across Wi-Fi and mobile data. Updates are encrypted, and only people with this link can read the score. If you switch apps, viewers keep the last score and catch up when you're back.</p>
+    <p class="note">Works across Wi-Fi and mobile data. Updates are encrypted and signed: only people with this link can read the score, and only the scorer can change it. If you switch apps, viewers keep the last score and catch up when you're back.</p>
   </section>
+
+  <section id="finalCard" class="card" hidden>
+    <h2>Share the scorecard</h2>
+    <p class="note">Sends a text scorecard to a WhatsApp chat or group.</p>
+    <div class="btns">
+      <a class="btn" id="waCard" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Share on WhatsApp</a>
+      <button class="btn ghost" id="copyCard">Copy scorecard</button>
+    </div>
+    <pre id="cardTxt" class="note" style="white-space:pre-wrap;margin:0" hidden></pre>
+  </section>
+
+  <details id="handCard" class="card sc" hidden>
+    <summary>Hand over scoring</summary>
+    <div class="scb">
+      <p class="note">Let another phone take over scoring this match. Scan this code or open the link on the new phone. This phone then stops scoring and shows the live score.</p>
+      <p class="note warnTxt">Only give this to the new scorer. Anyone with it can change the score.</p>
+      <div class="share">
+        <div id="qr2" aria-label="QR code for handing over scoring"></div>
+        <div class="link">
+          <code id="handTxt"></code>
+          <div class="btns"><button class="btn ghost" id="copyHand">Copy link</button></div>
+        </div>
+      </div>
+    </div>
+  </details>
 
   <section id="endCard" hidden>
     <button class="btn danger" id="endBtn" style="width:100%">End match and delete</button>
@@ -248,7 +274,20 @@ const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
 /* Live updates go through the public ntfy.sh relay, end-to-end encrypted.
    The key lives only in the link's #part, which browsers never send to any server. */
 const RELAY = "https://ntfy.sh/", RELAY_WS = "wss://ntfy.sh/";
-let K = null, cryptoKey = null;
+let K = null, cryptoKey = null, signKey = null, verifyKey = null, SK = null;
+let SID = b64e(crypto.getRandomValues(new Uint8Array(6)));
+const ES = {name:"ECDSA", hash:"SHA-256"}, EC = {name:"ECDSA", namedCurve:"P-256"};
+async function makeSigner(){
+  const kp = await crypto.subtle.generateKey(EC, true, ["sign","verify"]);
+  const j = await crypto.subtle.exportKey("jwk", kp.privateKey);
+  SK = {x:j.x, y:j.y, d:j.d}; signKey = kp.privateKey; verifyKey = kp.publicKey;
+}
+async function loadSigner(x, y, d){
+  const base = {kty:"EC", crv:"P-256", x, y, ext:true};
+  verifyKey = await crypto.subtle.importKey("jwk", base, EC, false, ["verify"]);
+  if(d){ signKey = await crypto.subtle.importKey("jwk", {...base, d}, EC, false, ["sign"]); SK = {x, y, d}; }
+}
+const B43 = /^[A-Za-z0-9_-]{43}$/;
 const topic = () => PREFIX + S.id;
 function b64e(u8){ let s=""; for(let i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
 function b64d(s){ s=s.replace(/-/g,"+").replace(/_/g,"/"); while(s.length%4) s+="="; return Uint8Array.from(atob(s),c=>c.charCodeAt(0)); }
@@ -265,11 +304,15 @@ async function seal(obj){
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, cryptoKey, body));
   const all = new Uint8Array(12+ct.length); all.set(iv); all.set(ct, 12);
-  return "g1." + b64e(all);
+  const sig = new Uint8Array(await crypto.subtle.sign(ES, signKey, all));
+  return "g2." + b64e(sig) + "." + b64e(all);
 }
 async function unseal(txt){
-  if(typeof txt!=="string" || !txt.startsWith("g1.") || txt.length>400000) return null;
-  const all = b64d(txt.slice(3));
+  if(typeof txt!=="string" || !txt.startsWith("g2.") || txt.length>400000) return null;
+  const parts = txt.split("."); if(parts.length!==3) return null;
+  const sig = b64d(parts[1]), all = b64d(parts[2]);
+  /* only the scorer holds the signing key: anything else is ignored */
+  if(!(await crypto.subtle.verify(ES, verifyKey, sig, all))) return null;
   const pt = new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM", iv:all.slice(0,12)}, cryptoKey, all.slice(12)));
   const data = pt[0]===1 ? await squeeze(pt.slice(1), false) : pt.slice(1);
   return JSON.parse(new TextDecoder().decode(data));
@@ -361,9 +404,9 @@ function clean(s){
   if(mode==="full" && (players[0].length<2 || players[1].length<2)) return null;
   const pos = o => o && typeof o==="object" ? {str:ix(o.str), non:ix(o.non), bw:ix(o.bw), prev:ix(o.prev)} : null;
   return {
-    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,12), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: mode==="full" && !s.oneSide && !!s.lastMan,
+    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,24), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: mode==="full" && !s.oneSide && !!s.lastMan,
     teams:s.teams.map(t=>String(t).slice(0,20)),
-    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), wr:s.wr!==false, nr:s.nr!==false,
+    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false,
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
       balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({
         r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w),
@@ -409,11 +452,13 @@ function render(){
   if(isViewer && S.u) html += `<div class="prev">Last updated ${new Date(S.u).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</div>`;
   $("board").innerHTML = html;
   renderCard();
+  $("finalCard").hidden = !S.done;
+  if(S.done){ const t = scoreText(); $("cardTxt").textContent = t; $("waCard").href = "https://wa.me/?text=" + encodeURIComponent(t); }
 
   if(!isViewer){
     const nd = need(i), locked = S.done || inn.done || !!nd || !!held;
     document.querySelectorAll("#pad button").forEach(b=>{ if(b.id!=="undoBtn") b.disabled = locked; });
-    $("undoBtn").disabled = !!held || (!inn.balls.length && !(i===1 && S.innings[0].balls.length));
+    $("undoBtn").disabled = !canUndo();
     $("breakBox").hidden = !(i===0 && inn.done);
     $("fullTools").hidden = !full() || inn.done || S.done || !!nd;
     $("swapBtn").hidden = !!S.oneSide || aloneNow(i);
@@ -428,6 +473,30 @@ function render(){
     renderPick(nd);
   }
 }
+
+/* plain-text scorecard for WhatsApp: works for Quick and Full matches */
+function scoreText(){
+  const L = [`*${S.teams[0]} vs ${S.teams[1]}*`];
+  if(S.toss) L.push(S.toss);
+  [0,1].forEach(i=>{
+    const inn = S.innings[i]; if(!inn.balls.length) return;
+    const st = stats(inn);
+    L.push("", `*${S.teams[i]} ${st.runs}/${st.wk}* (${oversTxt(st.legal)} ov)`);
+    if(full()){
+      const batted = [];
+      inn.balls.forEach(b=>{ if(b.s!=null && !batted.includes(b.s)) batted.push(b.s); if(b.out!=null && !batted.includes(b.out)) batted.push(b.out); });
+      [inn.str, inn.non].forEach(p=>{ if(p!=null && !batted.includes(p)) batted.push(p); });
+      batted.forEach(p=>{ const f = batFig(inn,p); L.push(`${pname(i,p)} ${f.r}${f.out?"":"*"} (${f.b})`); });
+      if(st.wd+st.nb) L.push(`Extras ${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})`);
+      const bowled = []; inn.balls.forEach(b=>{ if(b.bw!=null && !bowled.includes(b.bw)) bowled.push(b.bw); });
+      if(bowled.length){ L.push("Bowling:"); bowled.forEach(p=>{ const f = bowlFig(inn,p); L.push(`${pname(1-i,p)} ${oversTxt(f.legal)}-${f.r}-${f.w}`); }); }
+    } else if(st.wd+st.nb) L.push(`Extras ${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})`);
+  });
+  L.push("", S.done ? `*${resultTxt()}*` : "Match in progress");
+  L.push(`${S.overs} over${S.overs===1?"":"s"} a side · scored with Gully Scorer`);
+  return L.join("\n");
+}
+$("copyCard").onclick = ()=>copyText(scoreText(), $("copyCard"), $("cardTxt"));
 
 function renderCard(){
   if(!full()){ $("scWrap").hidden = true; return; }
@@ -511,8 +580,8 @@ function confirmPick(){
 }
 
 /* ---------- scorer actions ---------- */
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify({at:Date.now(), S, k:K})); }catch(e){} }
-function commit(){ S.u = Date.now(); save(); render(); broadcast(); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({at:Date.now(), S, k:K, sk:SK, sid:SID})); }catch(e){} }
+function commit(){ S.u = Date.now(); S.v = (S.v||0) + 1; save(); render(); broadcast(); }
 function push(ball){
   const inn = S.innings[S.cur];
   if(full()){ ball.pre = {str:inn.str, non:inn.non, bw:inn.bw, prev:inn.prev}; ball.s = inn.str; ball.bw = inn.bw; }
@@ -528,7 +597,16 @@ function addBall(r){
   push(ball);
 }
 function finishWicket(out, wt){ const b = held; held = null; b.out = out; b.wt = wt; push(b); }
+function canUndo(){
+  if(held) return false;
+  const i = S.cur, inn = S.innings[i];
+  const ok = b => !full() || !!b.pre;
+  if(inn.balls.length) return ok(inn.balls[inn.balls.length-1]);
+  const p = S.innings[0].balls;
+  return i===1 && p.length>0 && ok(p[p.length-1]);
+}
 function undo(){
+  if(!canUndo()) return;
   let inn = S.innings[S.cur];
   if(!inn.balls.length && S.cur===1){ Object.assign(inn,{str:null,non:null,bw:null,prev:null}); S.cur = 0; inn = S.innings[0]; }
   if(!inn.balls.length) return;
@@ -618,9 +696,9 @@ $("setupForm").addEventListener("submit", e=>{
   let id=""; for(const v of rnd) id+=abc[v%abc.length];
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
-  importKey(K).then(k=>{ cryptoKey = k; broadcast(); });
   S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
-  startScorer();
+  Promise.all([importKey(K), makeSigner()]).then(([k])=>{ cryptoKey = k; startScorer(true); })
+    .catch(()=>fail("This browser can't start a secure match. Update the browser and try again."));
 });
 ["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
 
@@ -631,30 +709,43 @@ $("endBtn").onclick = ()=>{
   clearTimeout(armT);
   b.disabled = true; b.textContent = "Ending match…";
   const done = ()=>{ try{ localStorage.removeItem(KEY); }catch(e){} location.hash=""; location.reload(); };
-  seal({t:"end"}).then(body=>fetch(RELAY+topic(), {method:"POST", body, referrerPolicy:"no-referrer"})).catch(()=>{}).finally(done);
+  seal({t:"end", sid:SID}).then(body=>fetch(RELAY+topic(), {method:"POST", body, referrerPolicy:"no-referrer"})).catch(()=>{}).finally(done);
 };
 
-function startScorer(){
-  $("setup").hidden = true;
-  ["boardWrap","scorer","shareCard","endCard"].forEach(id=>$(id).hidden=false);
-  const link = location.href.split("#")[0] + "#watch-" + S.id + "." + K;
+const baseUrl = () => location.href.split("#")[0];
+const watchLink = () => `${baseUrl()}#watch-${S.id}.${K}.${SK.x}.${SK.y}`;
+const handLink = () => `${baseUrl()}#score-${S.id}.${K}.${SK.x}.${SK.y}.${SK.d}`;
+function startScorer(fresh){
+  $("setup").hidden = true; $("viewerNote").hidden = true;
+  ["boardWrap","scorer","shareCard","endCard","handCard"].forEach(id=>$(id).hidden=false);
+  const link = watchLink();
   $("linkTxt").textContent = link;
   $("waBtn").href = "https://wa.me/?text=" + encodeURIComponent(`Live score: ${S.teams[0]} vs ${S.teams[1]} ${link}`);
   $("qr").innerHTML = "";
   try{ new QRCode($("qr"), {text:link, width:132, height:132, colorDark:"#000000", colorLight:"#ffffff"}); }catch(e){ $("qr").hidden = true; }
-  keepAwake(); commit();
+  $("handTxt").textContent = handLink(); $("qr2").innerHTML = ""; $("handCard").open = false;
+  keepAwake();
+  if(fresh) commit(); else { render(); broadcast(); }
+  watchTakeover();
 }
-$("copyBtn").onclick = ()=>{
-  const t = $("linkTxt").textContent;
-  navigator.clipboard.writeText(t).then(()=>{ $("copyBtn").textContent="Copied"; setTimeout(()=>$("copyBtn").textContent="Copy link",1500); })
-    .catch(()=>{ const r=document.createRange(); r.selectNodeContents($("linkTxt")); const s=getSelection(); s.removeAllRanges(); s.addRange(r); });
-};
+$("handCard").addEventListener("toggle",()=>{
+  if(!$("handCard").open || $("qr2").childNodes.length) return;
+  try{ new QRCode($("qr2"), {text:handLink(), width:132, height:132, colorDark:"#000000", colorLight:"#ffffff", correctLevel:QRCode.CorrectLevel.L}); }catch(e){ $("qr2").hidden = true; }
+});
+$("copyHand").onclick = ()=>copyText(handLink(), $("copyHand"), $("handTxt"));
+function copyText(text, btn, shown){
+  const label = btn.textContent;
+  navigator.clipboard.writeText(text).then(()=>{ btn.textContent="Copied"; setTimeout(()=>btn.textContent=label,1500); })
+    .catch(()=>{ shown.hidden = false; const r=document.createRange(); r.selectNodeContents(shown); const s=getSelection(); s.removeAllRanges(); s.addRange(r); });
+}
+$("copyBtn").onclick = ()=>copyText($("linkTxt").textContent, $("copyBtn"), $("linkTxt"));
 
 /* ---------- keep scorer screen on ---------- */
 async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
 document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState!=="visible" || !S || isViewer) return;
-  keepAwake(); broadcast();
+  keepAwake();
+  checkTakeover().then(taken=>{ if(!taken) broadcast(); });
 });
 
 /* ---------- live sharing: encrypted updates through the relay ---------- */
@@ -665,10 +756,10 @@ function later(ms){ if(!sendTimer) sendTimer = setTimeout(flush, ms); }
 function slim(){ const c = JSON.parse(JSON.stringify(S)); c.innings.forEach(inn=>inn.balls.forEach(b=>{ delete b.pre; })); return c; }
 async function flush(){
   sendTimer = null;
-  if(sending || !dirty || !cryptoKey) return;
+  if(sending || !dirty || !cryptoKey || !signKey || isViewer) return;
   sending = true; dirty = false;
   try{
-    const body = await seal({t:"state", s:slim()});
+    const body = await seal({t:"state", s:slim(), sid:SID});
     const r = await fetch(RELAY+topic(), {method:"POST", body, referrerPolicy:"no-referrer"});
     if(r.status===429){ dirty = true; setNet("Busy · retrying","warn"); later(10000); }
     else if(!r.ok) throw new Error("relay " + r.status);
@@ -679,26 +770,75 @@ async function flush(){
 }
 window.addEventListener("online", ()=>{ if(S && !isViewer) broadcast(); });
 
-async function startViewer(id, k){
+async function decodeMsg(m){
+  if(!m || m.event!=="message") return null;
+  let txt = m.message;
+  if(m.attachment && typeof m.attachment.url==="string" && m.attachment.url.startsWith(RELAY)){
+    try{ txt = await (await fetch(m.attachment.url, {referrerPolicy:"no-referrer"})).text(); }catch(e){ return null; }
+  }
+  try{ return await unseal(txt); }catch(e){ return null; }
+}
+async function latest(T){
+  const r = await fetch(RELAY + T + "/json?poll=1&since=latest", {referrerPolicy:"no-referrer"});
+  if(!r.ok) throw new Error("relay " + r.status);
+  let last = null;
+  for(const l of (await r.text()).trim().split("\n").filter(Boolean)){ try{ const d = await decodeMsg(JSON.parse(l)); if(d) last = d; }catch(e){} }
+  return last;
+}
+
+/* ---------- handover: another phone took over, so this one steps back ---------- */
+const takenBy = d => !!(d && d.sid && d.sid!==SID && (d.t==="end" || (d.t==="state" && d.s && (d.s.v||0) > (S.v||0))));
+function yieldScoring(){
+  if(isViewer) return;
+  isViewer = true;
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  try{ sessionStorage.setItem("gullyMoved","1"); }catch(e){}
+  try{ scorerWs && scorerWs.close(); }catch(e){}
+  location.replace(watchLink()); location.reload();
+}
+async function checkTakeover(){
+  try{ if(takenBy(await latest(topic()))){ yieldScoring(); return true; } }catch(e){}
+  return false;
+}
+let scorerWs = null;
+function watchTakeover(){
+  if(isViewer || !S || scorerWs) return;
+  try{ scorerWs = new WebSocket(RELAY_WS + topic() + "/ws"); }catch(e){ setTimeout(watchTakeover, 5000); return; }
+  scorerWs.onmessage = async e=>{ let m; try{ m = JSON.parse(e.data); }catch(_){ return; } if(takenBy(await decodeMsg(m))) yieldScoring(); };
+  scorerWs.onclose = ()=>{ scorerWs = null; if(!isViewer) setTimeout(watchTakeover, 5000); };
+}
+async function takeOver(id, k, x, y, d){
+  isViewer = false;
+  $("setup").hidden = true; $("viewerNote").hidden = false;
+  setNet("Taking over…","warn"); $("viewerMsg").textContent = "Loading the match from the scorer's last update…";
+  try{ K = k; cryptoKey = await importKey(k); await loadSigner(x, y, d); }
+  catch(e){ setNet("Bad link","bad"); $("viewerMsg").textContent = "This handover link is incomplete. Ask the scorer to send it again."; return; }
+  let got = null;
+  try{ got = await latest(PREFIX + id); }catch(e){ setNet("No connection","bad"); $("viewerMsg").textContent = "No internet on this phone. Connect and open the handover link again."; return; }
+  if(got && got.t==="end"){ setNet("Match ended",""); $("viewerMsg").textContent = "This match has already ended."; return; }
+  const c = got && got.t==="state" ? clean(got.s) : null;
+  if(!c || c.id!==id){ setNet("Not found","bad"); $("viewerMsg").textContent = "Couldn't load this match yet. Ask the scorer to keep their screen open for a few seconds, then open the handover link again."; return; }
+  history.replaceState(null, "", location.pathname + location.search);
+  S = c; startScorer(true);
+  setNet("You're scoring","live");
+}
+
+async function startViewer(id, k, x, y){
   isViewer = true;
   $("setup").hidden = true; $("boardWrap").hidden = false; $("viewerNote").hidden = false;
   const VKEY = "gullyView-"+id;
   S = null;
   $("board").innerHTML = `<div class="bteam"><span>Live score</span></div><div class="prev">Waiting for the scorer's first update…</div>`;
-  try{ cryptoKey = await importKey(k); }catch(e){ setNet("Bad link","bad"); $("viewerMsg").textContent = "This link is incomplete. Ask the scorer to send it again."; return; }
+  try{ cryptoKey = await importKey(k); await loadSigner(x, y); }catch(e){ setNet("Bad link","bad"); $("viewerMsg").textContent = "This link is incomplete. Ask the scorer to send it again."; return; }
   try{ const c = clean(JSON.parse(localStorage.getItem(VKEY)||"null")); if(c && Date.now()-c.u < TTL){ S=c; render(); } }catch(e){}
   const keep = ()=>{ try{ localStorage.setItem(VKEY, JSON.stringify(S)); }catch(e){} };
   const offline = msg=>{ $("viewerMsg").textContent = (S ? "Showing the last score. " : "") + msg; };
   const T = PREFIX + id;
-  let lastU = S ? S.u : 0, ended = false, ws = null, backoff = 2000;
-  const apply = async m=>{
-    if(!m || m.event!=="message" || ended) return;
-    let txt = m.message;
-    if(m.attachment && typeof m.attachment.url==="string" && m.attachment.url.startsWith(RELAY)){
-      try{ txt = await (await fetch(m.attachment.url, {referrerPolicy:"no-referrer"})).text(); }catch(e){ return; }
-    }
-    let d; try{ d = await unseal(txt); }catch(e){ return; }
-    if(!d) return;
+  let lastV = S ? (S.v||0) : 0, ended = false, ws = null, backoff = 2000, moved = false;
+  try{ moved = sessionStorage.getItem("gullyMoved")==="1"; sessionStorage.removeItem("gullyMoved"); }catch(e){}
+  const liveMsg = ()=> moved ? "Scoring was handed to another phone. This phone now shows the live score." : "Watching live. The score updates by itself.";
+  const handle = d=>{
+    if(!d || ended) return;
     if(d.t==="end"){
       ended = true; try{ localStorage.removeItem(VKEY); }catch(e){}
       setNet("Match ended",""); $("viewerMsg").textContent = "The scorer ended this match.";
@@ -706,14 +846,13 @@ async function startViewer(id, k){
     }
     if(d.t==="state"){
       const c = clean(d.s);
-      if(c && c.u >= lastU){ lastU = c.u; S = c; render(); keep(); setNet("Live","live"); $("viewerMsg").textContent = "Watching live. The score updates by itself."; }
+      if(c && (c.v||0) >= lastV){ lastV = c.v||0; S = c; render(); keep(); setNet("Live","live"); $("viewerMsg").textContent = liveMsg(); }
     }
   };
+  const apply = async m=>{ if(!ended) handle(await decodeMsg(m)); };
   const poll = async ()=>{
     try{
-      const r = await fetch(RELAY + T + "/json?poll=1&since=latest", {referrerPolicy:"no-referrer"});
-      const lines = (await r.text()).trim().split("\n").filter(Boolean);
-      for(const l of lines){ try{ await apply(JSON.parse(l)); }catch(e){} }
+      handle(await latest(T));
       if(!S && !ended){ setNet("Waiting…","warn"); offline("Waiting for the scorer's first update. Updates appear here automatically."); }
     }catch(e){ setNet("No connection","bad"); offline("No internet on this phone. Retrying…"); }
   };
@@ -735,13 +874,24 @@ async function startViewer(id, k){
 
 /* ---------- boot ---------- */
 (async function boot(){
-  const m = location.hash.match(/^#watch-([a-z0-9]{10,24})\.([A-Za-z0-9_-]{22})$/);
-  if(m){ startViewer(m[1], m[2]); return; }
-  if(/^#watch-/.test(location.hash)){ $("setup").hidden = true; $("viewerNote").hidden = false; setNet("Old link","bad"); $("viewerMsg").textContent = "This link is from an older version. Ask the scorer to share the link again."; return; }
+  const ID = "([a-z0-9]{10,24})", K22 = "([A-Za-z0-9_-]{22})", P43 = "([A-Za-z0-9_-]{43})";
+  let m = location.hash.match(new RegExp(`^#watch-${ID}\\.${K22}\\.${P43}\\.${P43}$`));
+  if(m){ startViewer(m[1], m[2], m[3], m[4]); return; }
+  m = location.hash.match(new RegExp(`^#score-${ID}\\.${K22}\\.${P43}\\.${P43}\\.${P43}$`));
+  if(m){ takeOver(m[1], m[2], m[3], m[4], m[5]); return; }
+  if(/^#(watch|score)-/.test(location.hash)){ $("setup").hidden = true; $("viewerNote").hidden = false; setNet("Old link","bad"); $("viewerMsg").textContent = "This link is from an older version. Ask the scorer to share the link again."; return; }
   try{
     const saved = JSON.parse(localStorage.getItem(KEY)||"null");
     const c = saved && Date.now()-saved.at < TTL ? clean(saved.S) : null;
-    if(c && c.id && typeof saved.k==="string" && /^[A-Za-z0-9_-]{22}$/.test(saved.k)){ S = c; K = saved.k; cryptoKey = await importKey(K); startScorer(); return; }
+    if(c && c.id && typeof saved.k==="string" && /^[A-Za-z0-9_-]{22}$/.test(saved.k)){
+      K = saved.k; cryptoKey = await importKey(K);
+      const sk = saved.sk;
+      if(sk && B43.test(sk.x||"") && B43.test(sk.y||"") && B43.test(sk.d||"")) await loadSigner(sk.x, sk.y, sk.d); else await makeSigner();
+      if(typeof saved.sid==="string" && /^[A-Za-z0-9_-]{8}$/.test(saved.sid)) SID = saved.sid;
+      S = c;
+      if(await checkTakeover()) return;
+      startScorer(false); return;
+    }
     localStorage.removeItem(KEY);
   }catch(e){}
 })();
