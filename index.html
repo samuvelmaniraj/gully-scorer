@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-oZxhSQQY48fwJWYhtTb/8u3syKCdZX7/e0P94DolTVQ=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FdtbHlT941ll/+Nd1wLtAGd4/p8yyxQaoVsmDvbiIGI=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -98,6 +98,8 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
 .chk span{color:var(--muted)}
 .chk b{color:var(--ink);font-weight:600}
 .linkbtn{background:none;border:none;padding:0;color:inherit;font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;border-radius:4px}
+.fh{align-self:flex-start;background:#B57A12;color:#fff;font-family:var(--f-display);font-weight:700;font-size:16px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;border-radius:6px}
+.sumimg{width:100%;height:auto;border-radius:12px;display:block;background:#0E1F17}
 .hint{font-size:13px;color:var(--amber)}
 .hint:empty{display:none}
 /* scorecard */
@@ -180,6 +182,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
       </div>
       <label for="wr" class="chk"><input type="checkbox" id="wr" checked><span><b>Wide gives 1 run</b><br>Turn off if a wide is only bowled again, with no run added.</span></label>
       <label for="simple" class="chk"><input type="checkbox" id="simple"><span><b>One-tap wide and wicket</b><br>Wide counts only the wide, with no extra runs. Wicket counts no runs. Both end the ball straight away.</span></label>
+      <label for="fh" class="chk"><input type="checkbox" id="fh" checked><span><b>Free hit after a no-ball</b><br>The next ball is a free hit: the batter can only be out run out.</span></label>
       <label for="nr" class="chk"><input type="checkbox" id="nr" checked><span><b>No-ball gives 1 run</b><br>Turn off if a no-ball is only bowled again, with no run added.</span></label>
       <label for="remember" class="chk"><input type="checkbox" id="remember" checked><span><b>Remember these settings</b><br>Team names, players, overs and options are saved on this phone only, ready for the next match.</span></label>
       <div id="setupErr" class="err"></div>
@@ -239,11 +242,16 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
   </section>
 
   <section id="finalCard" class="card" hidden>
-    <h2>Share the scorecard</h2>
-    <p class="note">Sends a text scorecard to a WhatsApp chat or group.</p>
+    <h2>Match summary</h2>
+    <img id="sumImg" class="sumimg" alt="Match summary graphic" width="1080" height="1350">
     <div class="btns">
-      <a class="btn" id="waCard" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Share on WhatsApp</a>
-      <button class="btn ghost" id="copyCard">Copy scorecard</button>
+      <button class="btn" id="shareImg">Share summary image</button>
+      <a class="btn ghost" id="saveImg" download="match-summary.png" style="text-decoration:none;text-align:center" hidden>Save image</a>
+    </div>
+    <p class="note" id="imgNote">Choose WhatsApp in the share menu. You can also long-press the image to save it.</p>
+    <div class="btns">
+      <a class="btn ghost small" id="waCard" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Send as text</a>
+      <button class="btn ghost small" id="copyCard">Copy text</button>
     </div>
     <pre id="cardTxt" class="note" style="white-space:pre-wrap;margin:0" hidden></pre>
   </section>
@@ -336,6 +344,13 @@ let S = null, pending = null, pw = false, held = null, isViewer = false, wakeLoc
 
 /* ---------- scoring maths (pure) ---------- */
 const full = () => S.mode === "full";
+/* free hit: the ball after a no-ball; it carries over wides and further no-balls */
+function freeHitNext(inn){
+  if(S.fh===false || inn.done) return false;
+  let f = false;
+  for(const b of inn.balls){ if(b.x==="nb") f = true; else if(b.x!=="wd") f = false; }
+  return f;
+}
 const pen = b => b.x==="wd" ? (S.wr===false ? 0 : 1) : b.x==="nb" ? (S.nr===false ? 0 : 1) : 0;
 function stats(inn){
   let runs=0,wk=0,legal=0,wd=0,nb=0;
@@ -421,7 +436,7 @@ function clean(s){
   return {
     id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,24), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: mode==="full" && !s.oneSide && !!s.lastMan,
     teams:s.teams.map(t=>String(t).slice(0,20)),
-    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false, simple:!!s.simple,
+    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false, simple:!!s.simple, fh:s.fh!==false,
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
       balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({
         r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w),
@@ -455,6 +470,7 @@ function render(){
     if(w && aloneNow(i)) w += `<div class="ln bw"><span>Last man batting alone</span></div>`;
     if(w) html += `<div class="who">${w}</div>`;
   }
+  if(!S.done && freeHitNext(inn)) html += `<div class="fh">Free hit</div>`;
   const co = currentOver(inn);
   html += `<div class="over"><span class="lab">${co.idx<0?"This over":"Over "+(co.idx+1)}</span>` +
     (co.balls.length ? co.balls.map(b=>{
@@ -468,7 +484,7 @@ function render(){
   $("board").innerHTML = html;
   renderCard();
   $("finalCard").hidden = !S.done;
-  if(S.done){ const t = scoreText(); $("cardTxt").textContent = t; $("waCard").href = "https://wa.me/?text=" + encodeURIComponent(t); }
+  if(S.done){ const t = scoreText(); $("cardTxt").textContent = t; $("waCard").href = "https://wa.me/?text=" + encodeURIComponent(t); if(sumFor !== S.v){ sumFor = S.v; drawSummary(); } }
 
   if(!isViewer){
     const nd = need(i), locked = S.done || inn.done || !!nd || !!held;
@@ -485,6 +501,9 @@ function render(){
     $("hint").textContent = pw ? (ex ? ex+" + wicket: tap runs completed before the run out" : "Wicket: tap runs completed before the out (0 if bowled or caught)") :
       pending==="wd" ? "Wide: tap extra runs taken (0 for just the wide)" :
       pending==="nb" ? "No-ball: tap runs off the bat (0 if none)" : "";
+    const fhNow = freeHitNext(inn);
+    $("wkBtn").textContent = fhNow ? "Run out" : "Wicket";
+    if(fhNow && !$("hint").textContent) $("hint").textContent = "Free hit: the batter can only be out run out.";
     renderPick(nd);
   }
 }
@@ -512,6 +531,102 @@ function scoreText(){
   return L.join("\n");
 }
 $("copyCard").onclick = ()=>copyText(scoreText(), $("copyCard"), $("cardTxt"));
+
+/* ---------- match summary image (broadcast-style) ---------- */
+let sumBlob = null, sumFor = -1, sumUrl = null;
+function battedList(inn){
+  const out = [];
+  inn.balls.forEach(b=>{ if(b.s!=null && !out.includes(b.s)) out.push(b.s); if(b.out!=null && !out.includes(b.out)) out.push(b.out); });
+  [inn.str, inn.non].forEach(p=>{ if(p!=null && !out.includes(p)) out.push(p); });
+  return out;
+}
+function bowledList(inn){ const out = []; inn.balls.forEach(b=>{ if(b.bw!=null && !out.includes(b.bw)) out.push(b.bw); }); return out; }
+function drawSummary(){
+  const W = 1080, PANEL = full() ? 300 : 180;
+  const H = 200 + 2*(110 + 12 + PANEL + 34) + 130 + 90;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  const D = (w,s)=>`${w} ${s}px "Roboto Condensed","Arial Narrow","Helvetica Neue",system-ui,sans-serif`;
+  const T = (w,s)=>`${w} ${s}px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif`;
+  const fit = (t, max)=>{ t = String(t); if(x.measureText(t).width <= max) return t; while(t.length>1 && x.measureText(t+"…").width > max) t = t.slice(0,-1); return t + "…"; };
+  const box = (X,Y,w,h,r,fill)=>{ x.beginPath(); if(x.roundRect) x.roundRect(X,Y,w,h,r); else x.rect(X,Y,w,h); x.fillStyle = fill; x.fill(); };
+  const text = (t, X, Y, font, color, align)=>{ x.font = font; x.fillStyle = color; x.textAlign = align || "left"; x.fillText(t, X, Y); x.textAlign = "left"; };
+  x.fillStyle = "#0E1F17"; x.fillRect(0,0,W,H);
+  x.fillStyle = "#11251B"; for(let s=0; s<W; s+=180) x.fillRect(s, 0, 90, H);
+  text("MATCH SUMMARY", 60, 104, D("700",50), "#9BE0B8");
+  x.font = T("500",30);
+  text(fit(`${S.teams[0]} vs ${S.teams[1]} · ${S.overs} over${S.overs===1?"":"s"} a side`, W-120), 60, 152, T("500",30), "rgba(244,247,241,.78)");
+  let y = 200;
+  [0,1].forEach(i=>{
+    const inn = S.innings[i], st = stats(inn);
+    box(40, y, W-80, 110, 18, "#1F6B45");
+    const sc = `${st.runs}/${st.wk}`, ov = `${oversTxt(st.legal)} ov`;
+    x.font = D("700",72); const scW = x.measureText(sc).width;
+    x.font = T("500",28); const ovW = x.measureText(ov).width;
+    x.font = D("700",52);
+    text(fit(S.teams[i].toUpperCase(), W-80-70-scW-ovW-60), 70, y+74, D("700",52), "#FFFFFF");
+    text(sc, W-70-ovW-20, y+82, D("700",72), "#FFFFFF", "right");
+    text(ov, W-70, y+80, T("500",28), "rgba(255,255,255,.82)", "right");
+    y += 110 + 12;
+    box(40, y, W-80, PANEL, 18, "#16301F");
+    if(full()){
+      const colW = (W-80-80)/2, L = 72, R = 72 + colW + 16, Lend = L + colW - 24, Rend = W - 72;
+      text("BATTING", L, y+48, T("700",22), "#9BE0B8"); text("BOWLING", R, y+48, T("700",22), "#9BE0B8");
+      const bat = battedList(inn).map(p=>({p, ...batFig(inn,p)})).sort((a,b)=>b.r-a.r || a.b-b.b).slice(0,3);
+      const bowl = bowledList(inn).map(p=>({p, ...bowlFig(inn,p)})).sort((a,b)=>b.w-a.w || a.r-b.r).slice(0,3);
+      bat.forEach((r,k)=>{
+        const yy = y + 104 + k*80, val = `${r.r}${r.out ? "" : "*"}`;
+        x.font = D("700",46); const vw = x.measureText(val).width;
+        x.font = T("600",32); text(fit(pname(i, r.p), colW-vw-50), L, yy, T("600",32), "#FFFFFF");
+        text(`${r.b} ball${r.b===1?"":"s"}`, L, yy+30, T("400",22), "rgba(244,247,241,.6)");
+        text(val, Lend, yy+8, D("700",46), "#FFFFFF", "right");
+      });
+      bowl.forEach((r,k)=>{
+        const yy = y + 104 + k*80, val = `${r.w}-${r.r}`;
+        x.font = D("700",46); const vw = x.measureText(val).width;
+        x.font = T("600",32); text(fit(pname(1-i, r.p), colW-vw-50), R, yy, T("600",32), "#FFFFFF");
+        text(`${oversTxt(r.legal)} over${r.legal===6?"":"s"}`, R, yy+30, T("400",22), "rgba(244,247,241,.6)");
+        text(val, Rend, yy+8, D("700",46), "#FFFFFF", "right");
+      });
+      if(!bat.length) text("No batting", L, y+110, T("400",28), "rgba(244,247,241,.6)");
+      if(!bowl.length) text("No bowling", R, y+110, T("400",28), "rgba(244,247,241,.6)");
+    } else {
+      let fours = 0, sixes = 0;
+      inn.balls.forEach(b=>{ if(b.x!=="wd"){ if(b.r===4) fours++; if(b.r===6) sixes++; } });
+      const rr = st.legal ? (st.runs/(st.legal/6)).toFixed(2) : "0.00";
+      const tiles = [[fours,"FOURS"],[sixes,"SIXES"],[st.wd+st.nb,"EXTRAS"],[rr,"RUN RATE"]];
+      const tw = (W-80-60-3*20)/4;
+      tiles.forEach(([v,l],k)=>{
+        const cx = 70 + k*(tw+20) + tw/2;
+        text(String(v), cx, y+102, D("700",68), "#FFFFFF", "center");
+        text(l, cx, y+144, T("700",22), "#9BE0B8", "center");
+      });
+    }
+    y += PANEL + 34;
+  });
+  box(40, y, W-80, 112, 18, "#F2B451");
+  x.font = D("700",52); text(fit(resultTxt().toUpperCase(), W-140), W/2, y+74, D("700",52), "#2A1C00", "center");
+  y += 112 + 52;
+  if(S.toss){ x.font = T("400",26); text(fit(S.toss, W-420), 60, y, T("400",26), "rgba(244,247,241,.6)"); }
+  text("Gully Scorer", W-60, y, T("700",26), "rgba(155,224,184,.85)", "right");
+  c.toBlob(b=>{
+    if(!b) return;
+    sumBlob = b;
+    if(sumUrl) URL.revokeObjectURL(sumUrl);
+    sumUrl = URL.createObjectURL(b);
+    $("sumImg").src = sumUrl; $("sumImg").height = H; $("saveImg").href = sumUrl;
+  }, "image/png");
+}
+$("shareImg").onclick = async ()=>{
+  if(!sumBlob) return;
+  const file = new File([sumBlob], "match-summary.png", {type:"image/png"});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:"Match summary"}); }catch(e){}
+  } else {
+    $("saveImg").hidden = false;
+    $("imgNote").textContent = "This browser can't share images directly. Tap Save image, or long-press the image, then send it on WhatsApp.";
+  }
+};
 
 function renderCard(){
   if(!full()){ $("scWrap").hidden = true; return; }
@@ -557,7 +672,8 @@ function renderPick(nd){
     const t = document.createElement("div"); t.className="ttl"; t.textContent = "How was the batter out?"; box.appendChild(t);
     const btns = document.createElement("div"); btns.className = "btns";
     const add = (txt, out, wt, cls) => { const b=document.createElement("button"); b.className="btn "+(cls||""); b.textContent=txt; b.onclick=()=>finishWicket(out,wt); btns.appendChild(b); };
-    add(`${pname(i,inn.str)} out (bowled, caught, lbw, stumped)`, inn.str, "b");
+    if(!freeHitNext(inn)) add(`${pname(i,inn.str)} out (bowled, caught, lbw, stumped)`, inn.str, "b");
+    else { const n = document.createElement("p"); n.className = "note"; n.textContent = "Free hit: only a run out counts."; box.appendChild(n); }
     add(`${pname(i,inn.str)} run out`, inn.str, "r", "ghost");
     if(!S.oneSide && inn.non!=null) add(`${pname(i,inn.non)} run out`, inn.non, "r", "ghost");
     const c=document.createElement("button"); c.className="btn ghost small"; c.textContent="Cancel"; c.onclick=()=>{ held=null; render(); }; btns.appendChild(c);
@@ -609,9 +725,11 @@ function addBall(r){
   const inn = S.innings[S.cur]; if(S.done || inn.done || need(S.cur)) return;
   const ball = {r, x:pending, w:pw};
   if(pw && full()){ held = ball; render(); return; }
+  if(pw && freeHitNext(inn)) ball.wt = "r";
   push(ball);
 }
-function finishWicket(out, wt){ const b = held; held = null; b.out = out; b.wt = wt; push(b); }
+function finishWicket(out, wt){
+  if(freeHitNext(S.innings[S.cur])) wt = "r"; const b = held; held = null; b.out = out; b.wt = wt; push(b); }
 function canUndo(){
   if(held) return false;
   const i = S.cur, inn = S.innings[i];
@@ -718,14 +836,14 @@ $("setupForm").addEventListener("submit", e=>{
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
   saveSettings();
-  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
+  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, fh: $("fh").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   Promise.all([importKey(K), makeSigner()]).then(([k])=>{ cryptoKey = k; startScorer(true); })
     .catch(()=>fail("This browser can't start a secure match. Update the browser and try again."));
 });
 ["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
 
 /* ---------- remember last match settings (this phone only) ---------- */
-const SETKEY = "gullySettings", FIELDS = ["t1","t2","p1","p2","ov","wk"], CHECKS = ["oneSide","lastMan","wr","nr","simple"];
+const SETKEY = "gullySettings", FIELDS = ["t1","t2","p1","p2","ov","wk"], CHECKS = ["oneSide","lastMan","wr","nr","simple","fh"];
 function saveSettings(){
   try{
     if(!$("remember").checked){ localStorage.removeItem(SETKEY); return; }
@@ -753,7 +871,7 @@ $("swapTeams").onclick = ()=>{
 function keepSettingsFrom(m){
   try{
     const o = {mode:m.mode, t1:m.teams[0], t2:m.teams[1], p1:(m.players[0]||[]).join("\n"), p2:(m.players[1]||[]).join("\n"),
-      ov:String(m.overs), wk:String(m.wickets), oneSide:!!m.oneSide, lastMan:!!m.lastMan, wr:m.wr!==false, nr:m.nr!==false, simple:!!m.simple};
+      ov:String(m.overs), wk:String(m.wickets), oneSide:!!m.oneSide, lastMan:!!m.lastMan, wr:m.wr!==false, nr:m.nr!==false, simple:!!m.simple, fh:m.fh!==false};
     localStorage.setItem(SETKEY, JSON.stringify(o));
   }catch(e){}
 }
