@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-JmIJ5SRNPsMwgoooSvs7MZH8t3rNwMfrjzjUFw97NOI=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-S8o8kxB88afLVpQ3VxL0ynfUdurR8VU+wGaCS9YR6s0=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -276,7 +276,7 @@ const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
    The key lives only in the link's #part, which browsers never send to any server. */
 const RELAY = "https://ntfy.sh/", RELAY_WS = "wss://ntfy.sh/";
 /* Our own relay on Cloudflare. When set, it replaces the public ntfy.sh relay. */
-const OWN_RELAY = "";
+const OWN_RELAY = "https://gully-relay.s-samuvelmaniraj.workers.dev";
 const relaySend = (T, body) => fetch(OWN_RELAY ? `${OWN_RELAY}/t/${T}/send` : RELAY + T, {method:"POST", body, referrerPolicy:"no-referrer"});
 const relayWsUrl = T => OWN_RELAY ? OWN_RELAY.replace(/^https:/, "wss:") + `/t/${T}/ws` : RELAY_WS + T + "/ws";
 function relaySocket(T){

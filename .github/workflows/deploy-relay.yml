@@ -20,3 +20,14 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: worker
+      - name: Check the relay works
+        run: |
+          O="Origin: https://samuvelmaniraj.github.io"
+          T="gullyscorer-ci$(date +%s)"
+          U="https://gully-relay.s-samuvelmaniraj.workers.dev/t/$T"
+          curl -fsS -X POST -H "$O" --data "g2.ci.check" "$U/send"; echo
+          test "$(curl -fsS -H "$O" "$U/latest")" = "g2.ci.check" && echo "latest: ok"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://evil.example' --data g2.x "$U/send")" = 403 && echo "other sites blocked: ok"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -H "$O" -H "Connection: Upgrade" -H "Upgrade: websocket" \
+            -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$U/ws" || true)
+          test "$code" = 101 && echo "live connection: ok"
