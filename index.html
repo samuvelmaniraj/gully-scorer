@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0+9sNvjub5YE56rZg29SPi8BizGhZjzZ8htVXsE9Crk=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dI3faEKxxmLcrMnS18B0k135ZtZFZM58wSINBIbyL7E=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -252,7 +252,8 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
         <div id="qr2" aria-label="QR code for handing over scoring"></div>
         <div class="link">
           <code id="handTxt"></code>
-          <div class="btns"><button class="btn ghost" id="copyHand">Copy link</button></div>
+          <div class="btns"><button class="btn ghost" id="copyHand">Copy link</button><a class="btn ghost" id="waHand" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">WhatsApp</a></div>
+          <p class="note">Send it in a private chat with the new scorer, not in the group.</p>
         </div>
       </div>
     </div>
@@ -724,6 +725,7 @@ function startScorer(fresh){
   $("qr").innerHTML = "";
   try{ new QRCode($("qr"), {text:link, width:132, height:132, colorDark:"#000000", colorLight:"#ffffff"}); }catch(e){ $("qr").hidden = true; }
   $("handTxt").textContent = handLink(); $("qr2").innerHTML = ""; $("handCard").open = false;
+  $("waHand").href = "https://wa.me/?text=" + encodeURIComponent(`Take over scoring for ${S.teams[0]} vs ${S.teams[1]}. Open this link on your phone. Please don't forward it, anyone with it can change the score: ${handLink()}`);
   keepAwake();
   if(fresh) commit(); else { render(); broadcast(); }
   watchTakeover();
