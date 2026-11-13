@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dI3faEKxxmLcrMnS18B0k135ZtZFZM58wSINBIbyL7E=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-JmIJ5SRNPsMwgoooSvs7MZH8t3rNwMfrjzjUFw97NOI=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://ntfy.sh wss://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -275,6 +275,15 @@ const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
 /* Live updates go through the public ntfy.sh relay, end-to-end encrypted.
    The key lives only in the link's #part, which browsers never send to any server. */
 const RELAY = "https://ntfy.sh/", RELAY_WS = "wss://ntfy.sh/";
+/* Our own relay on Cloudflare. When set, it replaces the public ntfy.sh relay. */
+const OWN_RELAY = "";
+const relaySend = (T, body) => fetch(OWN_RELAY ? `${OWN_RELAY}/t/${T}/send` : RELAY + T, {method:"POST", body, referrerPolicy:"no-referrer"});
+const relayWsUrl = T => OWN_RELAY ? OWN_RELAY.replace(/^https:/, "wss:") + `/t/${T}/ws` : RELAY_WS + T + "/ws";
+function relaySocket(T){
+  const ws = new WebSocket(relayWsUrl(T));
+  if(OWN_RELAY){ const ping = setInterval(()=>{ if(ws.readyState===1) ws.send("ping"); else if(ws.readyState>1) clearInterval(ping); }, 30000); }
+  return ws;
+}
 let K = null, cryptoKey = null, signKey = null, verifyKey = null, SK = null;
 let SID = b64e(crypto.getRandomValues(new Uint8Array(6)));
 const ES = {name:"ECDSA", hash:"SHA-256"}, EC = {name:"ECDSA", namedCurve:"P-256"};
@@ -710,7 +719,7 @@ $("endBtn").onclick = ()=>{
   clearTimeout(armT);
   b.disabled = true; b.textContent = "Ending match…";
   const done = ()=>{ try{ localStorage.removeItem(KEY); }catch(e){} location.hash=""; location.reload(); };
-  seal({t:"end", sid:SID}).then(body=>fetch(RELAY+topic(), {method:"POST", body, referrerPolicy:"no-referrer"})).catch(()=>{}).finally(done);
+  seal({t:"end", sid:SID}).then(body=>relaySend(topic(), body)).catch(()=>{}).finally(done);
 };
 
 const baseUrl = () => location.href.split("#")[0];
@@ -762,7 +771,7 @@ async function flush(){
   sending = true; dirty = false;
   try{
     const body = await seal({t:"state", s:slim(), sid:SID});
-    const r = await fetch(RELAY+topic(), {method:"POST", body, referrerPolicy:"no-referrer"});
+    const r = await relaySend(topic(), body);
     if(r.status===429){ dirty = true; setNet("Busy · retrying","warn"); later(10000); }
     else if(!r.ok) throw new Error("relay " + r.status);
     else { setNet("Live","live"); $("watchers").textContent = "Live. Viewers get each ball within a second or two."; }
@@ -780,7 +789,20 @@ async function decodeMsg(m){
   }
   try{ return await unseal(txt); }catch(e){ return null; }
 }
+/* a message pushed over the live connection */
+async function wsData(data){
+  if(typeof data!=="string") return null;
+  if(OWN_RELAY){ if(data==="pong") return null; try{ return await unseal(data); }catch(e){ return null; } }
+  let m; try{ m = JSON.parse(data); }catch(e){ return null; }
+  return decodeMsg(m);
+}
 async function latest(T){
+  if(OWN_RELAY){
+    const r = await fetch(`${OWN_RELAY}/t/${T}/latest`, {referrerPolicy:"no-referrer", cache:"no-store"});
+    if(!r.ok) throw new Error("relay " + r.status);
+    const txt = await r.text();
+    try{ return txt ? await unseal(txt) : null; }catch(e){ return null; }
+  }
   const r = await fetch(RELAY + T + "/json?poll=1&since=latest", {referrerPolicy:"no-referrer"});
   if(!r.ok) throw new Error("relay " + r.status);
   let last = null;
@@ -805,8 +827,8 @@ async function checkTakeover(){
 let scorerWs = null;
 function watchTakeover(){
   if(isViewer || !S || scorerWs) return;
-  try{ scorerWs = new WebSocket(RELAY_WS + topic() + "/ws"); }catch(e){ setTimeout(watchTakeover, 5000); return; }
-  scorerWs.onmessage = async e=>{ let m; try{ m = JSON.parse(e.data); }catch(_){ return; } if(takenBy(await decodeMsg(m))) yieldScoring(); };
+  try{ scorerWs = relaySocket(topic()); }catch(e){ setTimeout(watchTakeover, 5000); return; }
+  scorerWs.onmessage = async e=>{ if(takenBy(await wsData(e.data))) yieldScoring(); };
   scorerWs.onclose = ()=>{ scorerWs = null; if(!isViewer) setTimeout(watchTakeover, 5000); };
 }
 async function takeOver(id, k, x, y, d){
@@ -851,7 +873,6 @@ async function startViewer(id, k, x, y){
       if(c && (c.v||0) >= lastV){ lastV = c.v||0; S = c; render(); keep(); setNet("Live","live"); $("viewerMsg").textContent = liveMsg(); }
     }
   };
-  const apply = async m=>{ if(!ended) handle(await decodeMsg(m)); };
   const poll = async ()=>{
     try{
       handle(await latest(T));
@@ -860,9 +881,9 @@ async function startViewer(id, k, x, y){
   };
   const open = ()=>{
     if(ended) return;
-    try{ ws = new WebSocket(RELAY_WS + T + "/ws"); }catch(e){ setTimeout(open, backoff); return; }
+    try{ ws = relaySocket(T); }catch(e){ setTimeout(open, backoff); return; }
     ws.onopen = ()=>{ backoff = 2000; };
-    ws.onmessage = e=>{ try{ apply(JSON.parse(e.data)); }catch(_){} };
+    ws.onmessage = async e=>{ if(!ended) handle(await wsData(e.data)); };
     ws.onclose = ()=>{ if(ended) return; backoff = Math.min(backoff*2, 30000); setTimeout(()=>{ poll(); open(); }, backoff); };
   };
   setNet("Connecting…","warn");
