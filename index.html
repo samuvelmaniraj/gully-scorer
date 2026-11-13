@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zerVf7PJmf5P7Eiml7JUMaCLWWZu1Uc9gq4Bc8cjlXg=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-f4nOrFHsH9vPsMVXV1Mv0hlw7p08wVRdI+J4cwlxUkg=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -97,6 +97,7 @@ button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:m
 .chk input{width:20px;height:20px;margin:2px 0 0;flex:none;accent-color:var(--turf)}
 .chk span{color:var(--muted)}
 .chk b{color:var(--ink);font-weight:600}
+.linkbtn{background:none;border:none;padding:0;color:inherit;font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;border-radius:4px}
 .hint{font-size:13px;color:var(--amber)}
 .hint:empty{display:none}
 /* scorecard */
@@ -141,6 +142,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
   <section id="setup" class="card">
     <h2>New match</h2>
     <form id="setupForm" style="display:flex;flex-direction:column;gap:12px">
+      <p id="savedNote" class="note banner" hidden>Filled in from your last match. <button type="button" class="linkbtn" id="resetSet">Clear and start fresh</button></p>
       <div class="seg" role="radiogroup" aria-label="Scoring style">
         <input type="radio" name="mode" id="mQuick" value="quick" checked><label for="mQuick"><b>Quick score</b><span>Just runs and wickets</span></label>
         <input type="radio" name="mode" id="mFull" value="full"><label for="mFull"><b>Full scorecard</b><span>Player names and figures</span></label>
@@ -176,8 +178,9 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
         <label for="wk" id="wkLab">Wickets per side<input id="wk" type="number" inputmode="numeric" min="1" max="14" value="5"></label>
       </div>
       <label for="wr" class="chk"><input type="checkbox" id="wr" checked><span><b>Wide gives 1 run</b><br>Turn off if a wide is only bowled again, with no run added.</span></label>
-      <label for="simple" class="chk"><input type="checkbox" id="simple" checked><span><b>One-tap wide and wicket</b><br>Wide counts only the wide, with no extra runs. Wicket counts no runs. Both end the ball straight away.</span></label>
+      <label for="simple" class="chk"><input type="checkbox" id="simple"><span><b>One-tap wide and wicket</b><br>Wide counts only the wide, with no extra runs. Wicket counts no runs. Both end the ball straight away.</span></label>
       <label for="nr" class="chk"><input type="checkbox" id="nr" checked><span><b>No-ball gives 1 run</b><br>Turn off if a no-ball is only bowled again, with no run added.</span></label>
+      <label for="remember" class="chk"><input type="checkbox" id="remember" checked><span><b>Remember these settings</b><br>Team names, players, overs and options are saved on this phone only, ready for the next match.</span></label>
       <div id="setupErr" class="err"></div>
       <button class="btn" type="submit">Start match</button>
     </form>
@@ -713,11 +716,34 @@ $("setupForm").addEventListener("submit", e=>{
   let id=""; for(const v of rnd) id+=abc[v%abc.length];
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
+  saveSettings();
   S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   Promise.all([importKey(K), makeSigner()]).then(([k])=>{ cryptoKey = k; startScorer(true); })
     .catch(()=>fail("This browser can't start a secure match. Update the browser and try again."));
 });
 ["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
+
+/* ---------- remember last match settings (this phone only) ---------- */
+const SETKEY = "gullySettings", FIELDS = ["t1","t2","p1","p2","ov","wk"], CHECKS = ["oneSide","lastMan","wr","nr","simple"];
+function saveSettings(){
+  try{
+    if(!$("remember").checked){ localStorage.removeItem(SETKEY); return; }
+    const o = {mode: $("mFull").checked ? "full" : "quick"};
+    FIELDS.forEach(f=>o[f] = $(f).value); CHECKS.forEach(c=>o[c] = $(c).checked);
+    localStorage.setItem(SETKEY, JSON.stringify(o));
+  }catch(e){}
+}
+function loadSettings(){
+  let o = null; try{ o = JSON.parse(localStorage.getItem(SETKEY)||"null"); }catch(e){}
+  if(!o || typeof o!=="object") return;
+  $(o.mode==="full" ? "mFull" : "mQuick").checked = true;
+  FIELDS.forEach(f=>{ if(typeof o[f]==="string") $(f).value = o[f].slice(0, f[0]==="p" ? 400 : 20); });
+  CHECKS.forEach(c=>{ if(typeof o[c]==="boolean") $(c).checked = o[c]; });
+  ["t1","t2"].forEach(id=>$(id).dispatchEvent(new Event("input")));
+  syncMode(); $("savedNote").hidden = false;
+}
+$("resetSet").onclick = ()=>{ try{ localStorage.removeItem(SETKEY); }catch(e){} location.reload(); };
+loadSettings();
 
 let armT = null;
 $("endBtn").onclick = ()=>{
