@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-S8o8kxB88afLVpQ3VxL0ynfUdurR8VU+wGaCS9YR6s0=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zerVf7PJmf5P7Eiml7JUMaCLWWZu1Uc9gq4Bc8cjlXg=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -176,6 +176,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
         <label for="wk" id="wkLab">Wickets per side<input id="wk" type="number" inputmode="numeric" min="1" max="14" value="5"></label>
       </div>
       <label for="wr" class="chk"><input type="checkbox" id="wr" checked><span><b>Wide gives 1 run</b><br>Turn off if a wide is only bowled again, with no run added.</span></label>
+      <label for="simple" class="chk"><input type="checkbox" id="simple" checked><span><b>One-tap wide and wicket</b><br>Wide counts only the wide, with no extra runs. Wicket counts no runs. Both end the ball straight away.</span></label>
       <label for="nr" class="chk"><input type="checkbox" id="nr" checked><span><b>No-ball gives 1 run</b><br>Turn off if a no-ball is only bowled again, with no run added.</span></label>
       <div id="setupErr" class="err"></div>
       <button class="btn" type="submit">Start match</button>
@@ -416,7 +417,7 @@ function clean(s){
   return {
     id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,24), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: mode==="full" && !s.oneSide && !!s.lastMan,
     teams:s.teams.map(t=>String(t).slice(0,20)),
-    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false,
+    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false, simple:!!s.simple,
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
       balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({
         r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w),
@@ -624,9 +625,15 @@ function undo(){
   inn.done = false; S.done = false; pending = null; pw = false; held = null; commit();
 }
 document.querySelectorAll("#pad [data-r]").forEach(b=> b.addEventListener("click",()=>addBall(+b.dataset.r)));
-$("wdBtn").onclick = ()=>{ pending = pending==="wd"?null:"wd"; render(); };
+$("wdBtn").onclick = ()=>{
+  if(S.simple){ pending = "wd"; pw = false; addBall(0); return; }
+  pending = pending==="wd"?null:"wd"; render();
+};
 $("nbBtn").onclick = ()=>{ pending = pending==="nb"?null:"nb"; render(); };
-$("wkBtn").onclick = ()=>{ pw = !pw; render(); };
+$("wkBtn").onclick = ()=>{
+  if(S.simple){ if(pending==="wd") pending = null; pw = true; addBall(0); return; }
+  pw = !pw; render();
+};
 $("undoBtn").onclick = undo;
 $("nextInn").onclick = ()=>{ S.cur = 1; commit(); };
 $("swapBtn").onclick = ()=>{ const inn=S.innings[S.cur]; [inn.str,inn.non]=[inn.non,inn.str]; commit(); };
@@ -706,7 +713,7 @@ $("setupForm").addEventListener("submit", e=>{
   let id=""; for(const v of rnd) id+=abc[v%abc.length];
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
-  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
+  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
   Promise.all([importKey(K), makeSigner()]).then(([k])=>{ cryptoKey = k; startScorer(true); })
     .catch(()=>fail("This browser can't start a secure match. Update the browser and try again."));
 });
