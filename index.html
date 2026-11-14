@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ftGoaNm7nJF6YZj425Zf4qoZeAxfI+AgrtojqZ6P+o4=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ftGoaNm7nJF6YZj425Zf4qoZeAxfI+AgrtojqZ6P+o4=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -281,7 +281,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
   </section>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="></script>
 <script>
 const $ = id => document.getElementById(id);
 const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
