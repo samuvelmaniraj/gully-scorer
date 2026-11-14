@@ -1,0 +1,1135 @@
+<title>Gully Scorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one narrow column like a scorer's clipboard; scoreboard on top, big tap pad below */
+:root{
+  --bg:#F3F5F2; --card:#FFFFFF; --ink:#16241D; --muted:#5D6B63; --line:#D6DDD8;
+  --turf:#1F6B45; --turf-soft:#E2EFE7; --ball:#B3261E; --ball-soft:#F8E4E2; --board:#14231B; --board-ink:#F4F7F1; --amber:#9A6200; --amber-soft:#FBF0D9;
+  --f-display:"Roboto Condensed","Arial Narrow","Helvetica Neue",sans-serif-condensed,system-ui,sans-serif;
+  --f-body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1612; --card:#18221C; --ink:#E8EEE9; --muted:#9AA9A0; --line:#2B3830;
+  --turf:#5CC48E; --turf-soft:#1C3127; --ball:#F07A70; --ball-soft:#3A1F1C; --board:#0A100C; --board-ink:#F4F7F1; --amber:#F2B451; --amber-soft:#33280F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1612; --card:#18221C; --ink:#E8EEE9; --muted:#9AA9A0; --line:#2B3830;
+  --turf:#5CC48E; --turf-soft:#1C3127; --ball:#F07A70; --ball-soft:#3A1F1C; --board:#0A100C; --board-ink:#F4F7F1; --amber:#F2B451; --amber-soft:#33280F; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 32px}
+.wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:26px;letter-spacing:.02em;text-transform:uppercase;line-height:1}
+.brand span{color:var(--ball)}
+.chip{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--line);color:var(--muted);white-space:nowrap}
+.chip.live{background:var(--turf-soft);color:var(--turf)}
+.chip.warn{background:var(--amber-soft);color:var(--amber)}
+.chip.bad{background:var(--ball-soft);color:var(--ball)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+h2{font-family:var(--f-display);font-size:20px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin:0;text-wrap:balance}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--muted)}
+input,textarea,select{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+textarea{min-height:120px;resize:vertical;line-height:1.4}
+input:focus-visible,button:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--turf);outline-offset:2px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row2>*{min-width:0}
+.err{color:var(--ball);font-size:13px}
+.err:empty{display:none}
+button{font:inherit;cursor:pointer;border:none;border-radius:12px;touch-action:manipulation}
+.btn{background:var(--turf);color:#fff;font-weight:600;padding:13px 16px;font-size:16px}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:9px 12px;font-size:14px}
+.btn.danger{background:var(--ball-soft);color:var(--ball)}
+.btn.danger.armed{background:var(--ball);color:#fff}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btns .btn{flex:1 1 auto}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:4px}
+.seg input{position:absolute;opacity:0;width:1px;height:1px}
+.seg label{cursor:pointer;border-radius:9px;padding:8px 10px;color:var(--ink);gap:0}
+.seg label b{font-size:15px}
+.seg label span{font-size:12px;font-weight:400;color:var(--muted)}
+.seg input:checked+label{background:var(--card);box-shadow:0 0 0 1px var(--turf) inset}
+.seg input:focus-visible+label{outline:2px solid var(--turf);outline-offset:2px}
+/* scoreboard */
+.board{background:var(--board);color:var(--board-ink);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.bteam{font-size:13px;text-transform:uppercase;letter-spacing:.08em;opacity:.75;display:flex;justify-content:space-between;gap:8px}
+.score{font-family:var(--f-display);font-weight:700;font-size:72px;line-height:.9;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.score small{font-size:28px;font-weight:500;opacity:.8}
+.stats{display:flex;gap:18px;flex-wrap:wrap;font-variant-numeric:tabular-nums;font-size:14px}
+.stats b{font-family:var(--f-display);font-size:20px;font-weight:600;margin-right:4px}
+.target{font-size:14px;background:rgba(255,255,255,.08);border-radius:10px;padding:8px 10px}
+.who{display:flex;flex-direction:column;gap:2px;font-size:15px;font-variant-numeric:tabular-nums;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}
+.who .ln{display:flex;justify-content:space-between;gap:10px}
+.who .ln span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.who .on{font-weight:600}
+.who .bw{opacity:.75;font-size:14px;margin-top:2px}
+.over{display:flex;gap:6px;flex-wrap:wrap;min-height:34px;align-items:center}
+.over .lab{font-size:12px;opacity:.6;margin-right:4px;text-transform:uppercase;letter-spacing:.06em}
+.b{min-width:32px;height:32px;padding:0 6px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-display);font-weight:600;font-size:16px;background:rgba(255,255,255,.12)}
+.b.four,.b.six{background:#2E8B57;color:#fff}
+.b.w{background:#C62F25;color:#fff}
+.b.x{background:#B57A12;color:#fff}
+.prev{font-size:13px;opacity:.7}
+.result{font-family:var(--f-display);font-size:24px;font-weight:600;color:#9BE0B8}
+/* pick panel */
+.pick{border-color:var(--turf)}
+.pick .ttl{font-weight:600}
+/* pad */
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.k{background:var(--card);border:1px solid var(--line);color:var(--ink);font-family:var(--f-display);font-weight:600;font-size:26px;padding:14px 0;border-radius:12px}
+.k:active{transform:scale(.97)}
+.k.big{background:var(--turf-soft);color:var(--turf);border-color:transparent}
+.k.ext{font-size:20px;color:var(--amber);background:var(--amber-soft);border-color:transparent}
+.k.ext.on{background:var(--amber);color:#fff}
+.k.wk{grid-column:span 2;background:var(--ball-soft);color:var(--ball);border-color:transparent;font-size:22px}
+.k.wk.on{background:var(--ball);color:#fff}
+.k.undo{grid-column:span 2;font-size:20px;color:var(--muted)}
+.k:disabled{opacity:.35;cursor:not-allowed}
+.chk{flex-direction:row;align-items:flex-start;gap:10px;cursor:pointer;color:var(--ink);font-weight:400;font-size:14px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.chk input{width:20px;height:20px;margin:2px 0 0;flex:none;accent-color:var(--turf)}
+.chk span{color:var(--muted)}
+.chk b{color:var(--ink);font-weight:600}
+.linkbtn{background:none;border:none;padding:0;color:inherit;font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;border-radius:4px}
+.fh{align-self:flex-start;background:#B57A12;color:#fff;font-family:var(--f-display);font-weight:700;font-size:16px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;border-radius:6px}
+.sumimg{width:100%;height:auto;border-radius:12px;display:block;background:#0E1F17}
+.hint{font-size:13px;color:var(--amber)}
+.hint:empty{display:none}
+/* scorecard */
+details.sc{padding:0}
+details.sc summary{cursor:pointer;padding:14px 16px;font-family:var(--f-display);font-size:18px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.scb{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px}
+.scb h3{margin:0;font-size:15px;font-weight:600}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 6px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{font-size:12px;color:var(--muted);font-weight:500}
+td .how{display:block;font-size:12px;color:var(--muted)}
+.share{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+#qr,#qr2{background:#fff;padding:8px;border-radius:10px;line-height:0}
+#qr img,#qr canvas,#qr2 img,#qr2 canvas{width:132px;height:132px}
+.warnTxt{color:var(--ball)}
+.link{font-size:13px;word-break:break-all;color:var(--muted);flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.link code{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);user-select:all}
+.note{font-size:13px;color:var(--muted);margin:0}
+.banner{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--turf-soft);color:var(--turf)}
+details.toss{background:var(--bg);border:1px solid var(--line);border-radius:10px}
+details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(--ink)}
+.tossIn{padding:0 12px 12px;display:flex;flex-direction:column;gap:10px}
+.coinRow{display:flex;align-items:center;gap:12px}
+.coin{width:56px;height:56px;border-radius:50%;flex:none;display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:26px;background:var(--amber-soft);color:var(--amber);border:2px solid var(--amber)}
+.coin.spin{animation:flip .9s ease-out}
+@keyframes flip{from{transform:rotateY(0)}to{transform:rotateY(1800deg)}}
+.tmsg{margin:0;font-size:15px;color:var(--ink)}
+@media (prefers-reduced-motion:reduce){.k:active{transform:none}.coin.spin{animation:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand">Gully<span>·</span>Scorer</div>
+    <span id="net" class="chip">Not started</span>
+  </header>
+
+  <section id="setup" class="card">
+    <h2>New match</h2>
+    <form id="setupForm" style="display:flex;flex-direction:column;gap:12px">
+      <p id="savedNote" class="note banner" hidden>Filled in from your last match. <button type="button" class="linkbtn" id="resetSet">Clear and start fresh</button></p>
+      <div class="seg" role="radiogroup" aria-label="Scoring style">
+        <input type="radio" name="mode" id="mQuick" value="quick" checked><label for="mQuick"><b>Quick score</b><span>Just runs and wickets</span></label>
+        <input type="radio" name="mode" id="mFull" value="full"><label for="mFull"><b>Full scorecard</b><span>Player names and figures</span></label>
+      </div>
+      <div class="row2">
+        <label for="t1">Batting first<input id="t1" placeholder="Team A" value="Team A" maxlength="20"></label>
+        <label for="t2">Bowling first<input id="t2" placeholder="Team B" value="Team B" maxlength="20"></label>
+      </div>
+      <button type="button" class="btn ghost small" id="swapTeams">Swap batting order</button>
+      <details id="tossBox" class="toss">
+        <summary>Toss the coin</summary>
+        <div class="tossIn">
+          <label for="caller">Who calls?<select id="caller"></select></label>
+          <div class="btns" id="callBtns">
+            <button type="button" class="btn ghost" data-call="H">Heads</button>
+            <button type="button" class="btn ghost" data-call="T">Tails</button>
+          </div>
+          <div class="coinRow"><div id="coin" class="coin" aria-hidden="true">?</div><p id="tossMsg" class="tmsg" aria-live="polite">Pick who calls, then tap Heads or Tails.</p></div>
+          <div id="choose" class="btns" hidden>
+            <button type="button" class="btn" id="chBat">Bat first</button>
+            <button type="button" class="btn ghost" id="chBowl">Bowl first</button>
+          </div>
+        </div>
+      </details>
+      <div id="rosters" class="row2" hidden>
+        <label for="p1">Team A players<textarea id="p1" placeholder="One name per line"></textarea></label>
+        <label for="p2">Team B players<textarea id="p2" placeholder="One name per line"></textarea></label>
+      </div>
+      <label id="oneSideLab" for="oneSide" class="chk" hidden><input type="checkbox" id="oneSide"><span><b>One-side batting</b><br>One batter at a time, no non-striker. Every player bats, so the team is all out when all are out.</span></label>
+      <label id="lastManLab" for="lastMan" class="chk" hidden><input type="checkbox" id="lastMan"><span><b>Last man bats alone</b><br>Two batters as normal. When one batter is left, he keeps batting alone until he's out. Off: all out when one batter is left.</span></label>
+      <p id="rosterNote" class="note" hidden>One name per line, 2 to 15 players. Leave a box empty to use Player 1, Player 2 and so on. All out when one batter is left.</p>
+      <div class="row2">
+        <label for="ov">Overs per side<input id="ov" type="number" inputmode="numeric" min="1" max="50" value="6"></label>
+        <label for="pa" id="paLab">Players a side<input id="pa" type="number" inputmode="numeric" min="2" max="15" value="6"></label>
+      </div>
+      <label for="wr" class="chk"><input type="checkbox" id="wr" checked><span><b>Wide gives 1 run</b><br>Turn off if a wide is only bowled again, with no run added.</span></label>
+      <label for="simple" class="chk"><input type="checkbox" id="simple"><span><b>One-tap wide and wicket</b><br>Wide counts only the wide, with no extra runs. Wicket counts no runs. Both end the ball straight away.</span></label>
+      <label for="fh" class="chk"><input type="checkbox" id="fh" checked><span><b>Free hit after a no-ball</b><br>The next ball is a free hit: the batter can only be out run out.</span></label>
+      <label for="nr" class="chk"><input type="checkbox" id="nr" checked><span><b>No-ball gives 1 run</b><br>Turn off if a no-ball is only bowled again, with no run added.</span></label>
+      <label for="remember" class="chk"><input type="checkbox" id="remember" checked><span><b>Remember these settings</b><br>Team names, players, overs and options are saved on this phone only, ready for the next match.</span></label>
+      <div id="setupErr" class="err"></div>
+      <button class="btn" type="submit">Start match</button>
+    </form>
+    <p class="note">Keep this page open on the scorer's phone. Viewers watch live through the share link. No sign-up and nothing saved online. The match disappears from this phone when you end it.</p>
+  </section>
+
+  <section id="boardWrap" hidden>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section id="pick" class="card pick" hidden></section>
+
+  <section id="scorer" class="card" hidden>
+    <div id="hint" class="hint"></div>
+    <div class="pad" id="pad">
+      <button class="k big" data-r="0" aria-label="Dot ball">0</button>
+      <button class="k big" data-r="1">1</button>
+      <button class="k big" data-r="2">2</button>
+      <button class="k big" data-r="3">3</button>
+      <button class="k big" data-r="4">4</button>
+      <button class="k big" data-r="6">6</button>
+      <button class="k ext" id="wdBtn" aria-pressed="false">Wd</button>
+      <button class="k ext" id="nbBtn" aria-pressed="false">Nb</button>
+      <button class="k wk" id="wkBtn" aria-pressed="false">Wicket</button>
+      <button class="k undo" id="undoBtn">Undo</button>
+    </div>
+    <div id="fullTools" class="btns" hidden>
+      <button class="btn ghost small" id="swapBtn">Swap strike</button>
+      <button class="btn ghost small" id="chgBowl">Change bowler</button>
+    </div>
+    <div id="breakBox" class="btns" hidden>
+      <button class="btn" id="nextInn">Start 2nd innings</button>
+    </div>
+  </section>
+
+  <details id="scWrap" class="card sc" hidden>
+    <summary>Full scorecard</summary>
+    <div class="scb" id="sc"></div>
+  </details>
+
+  <section id="shareCard" class="card" hidden>
+    <h2>Share live score</h2>
+    <div class="share">
+      <div id="qr" aria-label="QR code for the viewer link"></div>
+      <div class="link">
+        <code id="linkTxt"></code>
+        <div class="btns">
+          <button class="btn ghost" id="copyBtn">Copy link</button>
+          <a class="btn ghost" id="waBtn" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">WhatsApp</a>
+        </div>
+      </div>
+    </div>
+    <p class="note" id="watchers">Sending live updates…</p>
+    <p class="note">Works across Wi-Fi and mobile data. Updates are encrypted and signed: only people with this link can read the score, and only the scorer can change it. If you switch apps, viewers keep the last score and catch up when you're back.</p>
+  </section>
+
+  <section id="finalCard" class="card" hidden>
+    <h2>Match summary</h2>
+    <img id="sumImg" class="sumimg" alt="Match summary graphic" width="1920" height="1080">
+    <div class="btns">
+      <button class="btn" id="shareImg">Share summary image</button>
+      <a class="btn ghost" id="saveImg" download="match-summary.png" style="text-decoration:none;text-align:center" hidden>Save image</a>
+    </div>
+    <p class="note" id="imgNote">Choose WhatsApp in the share menu. The summary text is added under the image, so it still reads if the image doesn't load.</p>
+    <div class="btns">
+      <a class="btn ghost small" id="waCard" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Send as text</a>
+      <button class="btn ghost small" id="copyCard">Copy text</button>
+    </div>
+    <pre id="cardTxt" class="note" style="white-space:pre-wrap;margin:0" hidden></pre>
+  </section>
+
+  <details id="handCard" class="card sc" hidden>
+    <summary>Hand over scoring</summary>
+    <div class="scb">
+      <p class="note">Let another phone take over scoring this match. Scan this code or open the link on the new phone. This phone then stops scoring and shows the live score.</p>
+      <p class="note warnTxt">Only give this to the new scorer. Anyone with it can change the score.</p>
+      <div class="share">
+        <div id="qr2" aria-label="QR code for handing over scoring"></div>
+        <div class="link">
+          <code id="handTxt"></code>
+          <div class="btns"><button class="btn ghost" id="copyHand">Copy link</button><a class="btn ghost" id="waHand" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">WhatsApp</a></div>
+          <p class="note">Send it in a private chat with the new scorer, not in the group.</p>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <section id="endCard" hidden>
+    <button class="btn danger" id="endBtn" style="width:100%">End match and delete</button>
+  </section>
+
+  <section id="viewerNote" hidden>
+    <div class="banner" id="viewerMsg">Connecting to the scorer…</div>
+  </section>
+</div>
+
+<script src="qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="></script>
+<script>
+const $ = id => document.getElementById(id);
+const KEY = "gullyScorerMatch", TTL = 12*3600*1000, PREFIX = "gullyscorer-";
+/* Live updates go through the public ntfy.sh relay, end-to-end encrypted.
+   The key lives only in the link's #part, which browsers never send to any server. */
+const RELAY = "https://ntfy.sh/", RELAY_WS = "wss://ntfy.sh/";
+/* Our own relay on Cloudflare. When set, it replaces the public ntfy.sh relay. */
+const OWN_RELAY = "https://gully-relay.s-samuvelmaniraj.workers.dev";
+const relaySend = (T, body) => fetch(OWN_RELAY ? `${OWN_RELAY}/t/${T}/send` : RELAY + T, {method:"POST", body, referrerPolicy:"no-referrer"});
+const relayWsUrl = T => OWN_RELAY ? OWN_RELAY.replace(/^https:/, "wss:") + `/t/${T}/ws` : RELAY_WS + T + "/ws";
+function relaySocket(T){
+  const ws = new WebSocket(relayWsUrl(T));
+  if(OWN_RELAY){ const ping = setInterval(()=>{ if(ws.readyState===1) ws.send("ping"); else if(ws.readyState>1) clearInterval(ping); }, 30000); }
+  return ws;
+}
+let K = null, cryptoKey = null, signKey = null, verifyKey = null, SK = null;
+let SID = b64e(crypto.getRandomValues(new Uint8Array(6)));
+const ES = {name:"ECDSA", hash:"SHA-256"}, EC = {name:"ECDSA", namedCurve:"P-256"};
+async function makeSigner(){
+  const kp = await crypto.subtle.generateKey(EC, true, ["sign","verify"]);
+  const j = await crypto.subtle.exportKey("jwk", kp.privateKey);
+  SK = {x:j.x, y:j.y, d:j.d}; signKey = kp.privateKey; verifyKey = kp.publicKey;
+}
+async function loadSigner(x, y, d){
+  const base = {kty:"EC", crv:"P-256", x, y, ext:true};
+  verifyKey = await crypto.subtle.importKey("jwk", base, EC, false, ["verify"]);
+  if(d){ signKey = await crypto.subtle.importKey("jwk", {...base, d}, EC, false, ["sign"]); SK = {x, y, d}; }
+}
+const B43 = /^[A-Za-z0-9_-]{43}$/;
+const topic = () => PREFIX + S.id;
+function b64e(u8){ let s=""; for(let i=0;i<u8.length;i++) s+=String.fromCharCode(u8[i]); return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+function b64d(s){ s=s.replace(/-/g,"+").replace(/_/g,"/"); while(s.length%4) s+="="; return Uint8Array.from(atob(s),c=>c.charCodeAt(0)); }
+const importKey = k => crypto.subtle.importKey("raw", b64d(k), "AES-GCM", false, ["encrypt","decrypt"]);
+async function squeeze(bytes, out){
+  if(typeof CompressionStream==="undefined") return null;
+  const st = new Blob([bytes]).stream().pipeThrough(out ? new CompressionStream("deflate-raw") : new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
+async function seal(obj){
+  const raw = new TextEncoder().encode(JSON.stringify(obj));
+  const z = await squeeze(raw, true).catch(()=>null), data = z || raw;
+  const body = new Uint8Array(1+data.length); body[0] = z ? 1 : 0; body.set(data, 1);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, cryptoKey, body));
+  const all = new Uint8Array(12+ct.length); all.set(iv); all.set(ct, 12);
+  const sig = new Uint8Array(await crypto.subtle.sign(ES, signKey, all));
+  return "g2." + b64e(sig) + "." + b64e(all);
+}
+async function unseal(txt){
+  if(typeof txt!=="string" || !txt.startsWith("g2.") || txt.length>400000) return null;
+  const parts = txt.split("."); if(parts.length!==3) return null;
+  const sig = b64d(parts[1]), all = b64d(parts[2]);
+  /* only the scorer holds the signing key: anything else is ignored */
+  if(!(await crypto.subtle.verify(ES, verifyKey, sig, all))) return null;
+  const pt = new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM", iv:all.slice(0,12)}, cryptoKey, all.slice(12)));
+  const data = pt[0]===1 ? await squeeze(pt.slice(1), false) : pt.slice(1);
+  return JSON.parse(new TextDecoder().decode(data));
+}
+let S = null, pending = null, pw = false, held = null, isViewer = false, wakeLock = null;
+
+/* ---------- scoring maths (pure) ---------- */
+const full = () => S.mode === "full";
+/* free hit: the ball after a no-ball; it carries over wides and further no-balls */
+function freeHitNext(inn){
+  if(S.fh===false || inn.done) return false;
+  let f = false;
+  for(const b of inn.balls){ if(b.x==="nb") f = true; else if(b.x!=="wd") f = false; }
+  return f;
+}
+const pen = b => b.x==="wd" ? (S.wr===false ? 0 : 1) : b.x==="nb" ? (S.nr===false ? 0 : 1) : 0;
+function stats(inn){
+  let runs=0,wk=0,legal=0,wd=0,nb=0;
+  for(const b of inn.balls){ runs += b.r + pen(b); if(b.w) wk++; if(!b.x) legal++; if(b.x==="wd") wd += pen(b)+b.r; if(b.x==="nb") nb += pen(b); }
+  return {runs,wk,legal,wd,nb};
+}
+const oversTxt = l => Math.floor(l/6) + "." + (l%6);
+const wkts = i => full() ? Math.max(1, S.players[i].length - (S.oneSide || S.lastMan ? 0 : 1)) : S.wickets;
+function freeBat(i){ const inn = S.innings[i], outs = outSet(inn); return S.players[i].filter((_,p)=>!outs.has(p) && p!==inn.str && p!==inn.non).length; }
+const aloneNow = i => { const inn = S.innings[i]; return !!S.lastMan && inn.str!=null && inn.non==null && freeBat(i)===0; };
+function target(){ return S.innings[0].done ? stats(S.innings[0]).runs + 1 : null; }
+function inningsOver(i){
+  const st = stats(S.innings[i]);
+  if(st.legal >= S.overs*6 || st.wk >= wkts(i)) return true;
+  return i===1 && st.runs >= target();
+}
+function resultTxt(){
+  const t = target(), s2 = stats(S.innings[1]), A = S.teams[0], B = S.teams[1];
+  if(s2.runs >= t){
+    const left = wkts(1) - s2.wk, balls = S.overs*6 - s2.legal;
+    return `${B} won by ${left} wicket${left===1?"":"s"}` + (balls > 0 ? ` (${balls} ball${balls===1?"":"s"} left)` : "");
+  }
+  if(s2.runs === t-1) return "Match tied";
+  const by = t-1-s2.runs; return `${A} won by ${by} run${by===1?"":"s"}`;
+}
+function ballLabel(b){
+  if(b.w){ const p=[]; if(b.x) p.push(b.x==="nb"?"Nb":"Wd"); if(b.r) p.push(b.r); p.push("W"); return p.join("+"); }
+  if(b.x==="wd") return b.r+pen(b) > 1 ? (b.r+pen(b))+"wd" : "Wd";
+  if(b.x==="nb") return b.r ? "Nb+"+b.r : "Nb";
+  return b.r===0 ? "•" : String(b.r);
+}
+function currentOver(inn){
+  let legal=0, out=[], last=-1;
+  inn.balls.forEach(b=>{ const idx=Math.floor(legal/6); if(!b.x) legal++; out.push([idx,b]); last=idx; });
+  return {idx:last, balls: out.filter(o=>o[0]===last).map(o=>o[1])};
+}
+/* players: batting team of innings i is team i, bowling team is the other */
+const pname = (team, p) => (S.players[team] && S.players[team][p]) || "Player " + (p+1);
+function batFig(inn, p){
+  let r=0,b=0,f=0,s=0,out=null;
+  for(const x of inn.balls){
+    if(x.s===p && x.x!=="wd"){ r+=x.r; b++; if(x.r===4) f++; if(x.r===6) s++; }
+    if(x.w && x.out===p) out=x;
+  }
+  return {r,b,f,s,out};
+}
+function bowlFig(inn, p){
+  let legal=0,r=0,w=0;
+  for(const x of inn.balls){ if(x.bw!==p) continue; if(!x.x) legal++; r += x.r + pen(x); if(x.w && x.wt==="b") w++; }
+  return {legal,r,w};
+}
+function outSet(inn){ const o=new Set(); inn.balls.forEach(b=>{ if(b.w && b.out!=null) o.add(b.out); }); return o; }
+function need(i){
+  const inn = S.innings[i];
+  if(!full() || inn.done || S.done) return null;
+  if(S.oneSide){ if(inn.str==null) return inn.balls.length ? "bat" : "open"; }
+  else {
+    if(inn.str==null && inn.non==null) return inn.balls.length ? "bat" : "open";
+    if((inn.str==null || inn.non==null) && !aloneNow(i)) return "bat";
+  }
+  if(inn.bw==null) return "bowl";
+  return null;
+}
+/* move players after a ball: runs crossed, wicket, end of over */
+function advance(inn, ball){
+  const ti = S.innings.indexOf(inn);
+  const swap = () => !S.oneSide && !aloneNow(ti);
+  if(swap() && ball.r % 2 === 1){ [inn.str, inn.non] = [inn.non, inn.str]; }
+  if(ball.w){ if(inn.str===ball.out) inn.str=null; else if(inn.non===ball.out) inn.non=null; }
+  /* last man left: he takes strike and bats alone */
+  if(S.lastMan && !inn.done && (inn.str==null) !== (inn.non==null) && freeBat(ti)===0){ inn.str = inn.str!=null ? inn.str : inn.non; inn.non = null; }
+  if(inn.done) return;
+  if(!ball.x && stats(inn).legal % 6 === 0){ if(swap()) [inn.str, inn.non] = [inn.non, inn.str]; inn.prev = inn.bw; inn.bw = null; }
+}
+
+/* ---------- never trust incoming data: rebuild it from plain numbers and short text ---------- */
+function clean(s){
+  const n=(v,max)=>{ v=Math.floor(+v); return Number.isFinite(v)&&v>=0&&v<=max ? v : 0; };
+  const ix=v=>Number.isInteger(v)&&v>=0&&v<=14 ? v : null;
+  const names=a=>Array.isArray(a) ? a.slice(0,15).map(t=>String(t).slice(0,20)) : [];
+  if(!s || !Array.isArray(s.teams) || s.teams.length!==2 || !Array.isArray(s.innings) || s.innings.length!==2) return null;
+  const mode = s.mode==="full" ? "full" : "quick";
+  const players = mode==="full" && Array.isArray(s.players) ? [names(s.players[0]), names(s.players[1])] : [[],[]];
+  if(mode==="full" && (players[0].length<2 || players[1].length<2)) return null;
+  const pos = o => o && typeof o==="object" ? {str:ix(o.str), non:ix(o.non), bw:ix(o.bw), prev:ix(o.prev)} : null;
+  return {
+    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,24), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: !(mode==="full" && s.oneSide) && !!s.lastMan, size:n(s.size,15),
+    teams:s.teams.map(t=>String(t).slice(0,20)),
+    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false, simple:!!s.simple, fh:s.fh!==false,
+    innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
+      balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({
+        r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w),
+        s:ix(b&&b.s), bw:ix(b&&b.bw), out:ix(b&&b.out), wt:b&&b.wt==="r"?"r":b&&b.wt==="b"?"b":null, pre:pos(b&&b.pre) })) }))
+  };
+}
+
+/* ---------- render ---------- */
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function render(){
+  if(!S) return;
+  const i = S.cur, inn = S.innings[i], st = stats(inn), bat = S.teams[i];
+  const crr = st.legal ? (st.runs/(st.legal/6)).toFixed(2) : "0.00";
+  let html = `<div class="bteam"><span>${esc(bat)} batting</span><span>${i===0?"1st":"2nd"} innings${S.oneSide?" · one-side":""}</span></div>
+    <div class="score">${st.runs}/${st.wk}<small>${oversTxt(st.legal)} / ${S.overs} ov</small></div>
+    <div class="stats"><span><b>${crr}</b>run rate</span>`;
+  const t = target();
+  if(i===1 && t){
+    const need = Math.max(0, t-st.runs), ballsLeft = S.overs*6 - st.legal;
+    const rrr = ballsLeft>0 ? (need/(ballsLeft/6)).toFixed(2) : "–";
+    html += `<span><b>${rrr}</b>required</span></div>`;
+    if(!S.done) html += `<div class="target">${esc(bat)} need <b>${need}</b> from <b>${ballsLeft}</b> ball${ballsLeft===1?"":"s"} (target ${t})</div>`;
+  } else html += `</div>`;
+  if(full() && !inn.done){
+    const line = (p, on) => { const f = batFig(inn,p); return `<div class="ln ${on?"on":""}"><span>${esc(pname(i,p))}${on?" *":""}</span><span>${f.r} (${f.b})</span></div>`; };
+    let w = "";
+    if(inn.str!=null) w += line(inn.str, true);
+    if(inn.non!=null) w += line(inn.non, false);
+    const bp = inn.bw!=null ? inn.bw : (inn.balls.length ? inn.balls[inn.balls.length-1].bw : null);
+    if(bp!=null){ const f = bowlFig(inn,bp); w += `<div class="ln bw"><span>Bowling: ${esc(pname(1-i,bp))}</span><span>${oversTxt(f.legal)}-${f.r}-${f.w}</span></div>`; }
+    if(w && aloneNow(i)) w += `<div class="ln bw"><span>Last man batting alone</span></div>`;
+    if(w) html += `<div class="who">${w}</div>`;
+  }
+  if(!S.done && freeHitNext(inn)) html += `<div class="fh">Free hit</div>`;
+  const co = currentOver(inn);
+  html += `<div class="over"><span class="lab">${co.idx<0?"This over":"Over "+(co.idx+1)}</span>` +
+    (co.balls.length ? co.balls.map(b=>{
+      const c = b.w?"w":b.x?"x":b.r===4?"four":b.r===6?"six":"";
+      return `<span class="b ${c}">${ballLabel(b)}</span>`; }).join("") : `<span class="prev">Waiting for first ball</span>`) + `</div>`;
+  if(i===0 && S.toss) html += `<div class="prev">${esc(S.toss)}</div>`;
+  if(i===1){ const p = stats(S.innings[0]); html += `<div class="prev">${esc(S.teams[0])}: ${p.runs}/${p.wk} (${oversTxt(p.legal)} ov)</div>`; }
+  if(S.done) html += `<div class="result">${esc(resultTxt())}</div>`;
+  else if(i===0 && inn.done) html += `<div class="result">Innings break · target ${target()}</div>`;
+  if(isViewer && S.u) html += `<div class="prev">Last updated ${new Date(S.u).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</div>`;
+  $("board").innerHTML = html;
+  renderCard();
+  $("finalCard").hidden = !S.done;
+  if(S.done){ const t = scoreText(); $("cardTxt").textContent = t; $("waCard").href = "https://wa.me/?text=" + encodeURIComponent(t); if(sumFor !== S.v){ sumFor = S.v; drawSummary(); } }
+
+  if(!isViewer){
+    const nd = need(i), locked = S.done || inn.done || !!nd || !!held;
+    document.querySelectorAll("#pad button").forEach(b=>{ if(b.id!=="undoBtn") b.disabled = locked; });
+    $("undoBtn").disabled = !canUndo();
+    $("breakBox").hidden = !(i===0 && inn.done);
+    $("fullTools").hidden = !full() || inn.done || S.done || !!nd;
+    $("swapBtn").hidden = !!S.oneSide || aloneNow(i);
+    $("chgBowl").disabled = inn.bw==null;
+    $("wdBtn").classList.toggle("on", pending==="wd"); $("wdBtn").setAttribute("aria-pressed", pending==="wd");
+    $("nbBtn").classList.toggle("on", pending==="nb"); $("nbBtn").setAttribute("aria-pressed", pending==="nb");
+    $("wkBtn").classList.toggle("on", pw); $("wkBtn").setAttribute("aria-pressed", pw);
+    const ex = pending==="wd" ? "Wide" : pending==="nb" ? "No-ball" : "";
+    $("hint").textContent = pw ? (ex ? ex+" + wicket: tap runs completed before the run out" : "Wicket: tap runs completed before the out (0 if bowled or caught)") :
+      pending==="wd" ? "Wide: tap extra runs taken (0 for just the wide)" :
+      pending==="nb" ? "No-ball: tap runs off the bat (0 if none)" : "";
+    const fhNow = freeHitNext(inn);
+    $("wkBtn").textContent = fhNow ? "Run out" : "Wicket";
+    if(fhNow && !$("hint").textContent) $("hint").textContent = "Free hit: the batter can only be out run out.";
+    renderPick(nd);
+  }
+}
+
+/* plain-text scorecard for WhatsApp: a monospace table that reads well on a phone */
+const padE = (s,n)=>{ s = String(s); return s.length > n ? s.slice(0, n-1) + "…" : s.padEnd(n); };
+const padS = (s,n)=>String(s).padStart(n);
+/* team size: from the player lists in Full mode, from "Players a side" in Quick mode */
+function sideTxt(){
+  if(full()){ const a = S.players[0].length, b = S.players[1].length; return a===b ? `${a}-a-side` : `${a} v ${b} players`; }
+  return S.size ? `${S.size}-a-side` : "";
+}
+const oversWord = l => { const t = oversTxt(l); return t.endsWith(".0") ? t.slice(0,-2) : t; };
+function topBat(inn, n){ return battedList(inn).map(p=>({p, ...batFig(inn,p)})).sort((a,b)=>b.r-a.r || a.b-b.b).slice(0,n); }
+function topBowl(inn, n){ return bowledList(inn).map(p=>({p, ...bowlFig(inn,p)})).sort((a,b)=>b.w-a.w || a.r-b.r).slice(0,n); }
+function quickStats(inn){
+  const st = stats(inn); let fours = 0, sixes = 0;
+  inn.balls.forEach(b=>{ if(b.x!=="wd"){ if(b.r===4) fours++; if(b.r===6) sixes++; } });
+  return {st, fours, sixes, rr: st.legal ? (st.runs/(st.legal/6)).toFixed(2) : "0.00"};
+}
+function scoreText(){
+  const L = ["*MATCH SUMMARY*", [`${S.teams[0]} vs ${S.teams[1]}`, sideTxt(), `${S.overs} over${S.overs===1?"":"s"}`].filter(Boolean).join(" · ")];
+  if(S.toss) L.push(`_${S.toss}_`);
+  if(full()){
+    [0,1].forEach(i=>{
+      const inn = S.innings[i]; if(!inn.balls.length) return;
+      const st = stats(inn);
+      L.push("", `*${S.teams[i].toUpperCase()}  ${st.runs}-${st.wk}*  (${oversWord(st.legal)}/${S.overs} ov)`);
+      const t = ["```", padE("Batter",13) + padS("R",4) + padS("B",4)];
+      const cut = (s,n)=> s.length > n ? s.slice(0, n-1) + "…" : s;
+      topBat(inn,4).forEach(r=>t.push(padE(cut(pname(i,r.p),12) + (r.out?"":"*"),13) + padS(r.r,4) + padS(r.b,4)));
+      t.push("", padE("Bowler",13) + padS("W-R",6) + padS("O",5));
+      topBowl(inn,4).forEach(r=>t.push(padE(pname(1-i,r.p),13) + padS(`${r.w}-${r.r}`,6) + padS(oversTxt(r.legal),5)));
+      if(st.wd+st.nb) t.push("", `Extras ${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})`);
+      t.push("```"); L.push(t.join("\n"));
+    });
+  } else {
+    const a = quickStats(S.innings[0]), b = quickStats(S.innings[1]);
+    const row = (k, x, y)=>padE(k,9) + padS(x,8) + padS(y,8);
+    L.push("", ["```",
+      row("", S.teams[0].slice(0,7).toUpperCase(), S.teams[1].slice(0,7).toUpperCase()),
+      row("Score", `${a.st.runs}-${a.st.wk}`, `${b.st.runs}-${b.st.wk}`),
+      row("Overs", `${oversWord(a.st.legal)}/${S.overs}`, `${oversWord(b.st.legal)}/${S.overs}`),
+      row("4s / 6s", `${a.fours}/${a.sixes}`, `${b.fours}/${b.sixes}`),
+      row("Extras", a.st.wd+a.st.nb, b.st.wd+b.st.nb),
+      row("Run rate", a.rr, b.rr),
+      "```"].join("\n"));
+  }
+  L.push("", S.done ? `*${resultTxt().toUpperCase()}*` : "Match in progress");
+  L.push("_Scored with Gully Scorer_");
+  return L.join("\n");
+}
+$("copyCard").onclick = ()=>copyText(scoreText(), $("copyCard"), $("cardTxt"));
+
+/* ---------- match summary image (broadcast-style) ---------- */
+let sumBlob = null, sumFor = -1, sumUrl = null;
+function battedList(inn){
+  const out = [];
+  inn.balls.forEach(b=>{ if(b.s!=null && !out.includes(b.s)) out.push(b.s); if(b.out!=null && !out.includes(b.out)) out.push(b.out); });
+  [inn.str, inn.non].forEach(p=>{ if(p!=null && !out.includes(p)) out.push(p); });
+  return out;
+}
+function bowledList(inn){ const out = []; inn.balls.forEach(b=>{ if(b.bw!=null && !out.includes(b.bw)) out.push(b.bw); }); return out; }
+function drawSummary(){
+  const W = 1920, H = 1080, ROWS = full() ? 4 : 1, ROW = full() ? 55 : 100;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  const D = (w,s)=>`${w} ${s}px "Roboto Condensed","Arial Narrow","Helvetica Neue",system-ui,sans-serif`;
+  const fit = (t, max)=>{ t = String(t); if(x.measureText(t).width <= max) return t; while(t.length>1 && x.measureText(t+"…").width > max) t = t.slice(0,-1); return t + "…"; };
+  const rrect = (X,Y,w,h,r)=>{ x.beginPath(); if(x.roundRect) x.roundRect(X,Y,w,h,r); else x.rect(X,Y,w,h); };
+  const lin = (y0,y1,stops)=>{ const g = x.createLinearGradient(0,y0,0,y1); stops.forEach(([o,col])=>g.addColorStop(o,col)); return g; };
+  const linX = (x0,x1,stops)=>{ const g = x.createLinearGradient(x0,0,x1,0); stops.forEach(([o,col])=>g.addColorStop(o,col)); return g; };
+  const text = (t, X, Y, font, color, align, max)=>{ x.font = font; x.fillStyle = color; x.textAlign = align || "left"; x.fillText(max ? fit(t, max) : t, X, Y); x.textAlign = "left"; };
+  x.textBaseline = "middle";
+
+  /* stadium at night: sky, stands, floodlit oval */
+  x.fillStyle = lin(0, H, [[0,"#1B1236"],[0.28,"#5A1E3A"],[0.5,"#1A1A2A"],[1,"#0A1A10"]]); x.fillRect(0,0,W,H);
+  x.fillStyle = "#121520"; x.beginPath(); x.ellipse(W/2, H*0.98, W*0.78, H*0.55, 0, Math.PI, 2*Math.PI); x.fill();
+  for(let k=0;k<26;k++){ x.fillStyle = `rgba(255,${210+k%3*15},150,${0.35 + (k%4)*0.12})`; x.beginPath(); x.arc(80 + k*72, H*0.47 + Math.sin(k*1.7)*18, 2.5, 0, 7); x.fill(); }
+  const field = x.createRadialGradient(W/2, H*1.05, 60, W/2, H*1.05, W*0.65); field.addColorStop(0,"#3FAE4A"); field.addColorStop(1,"#14581F");
+  x.fillStyle = field; x.beginPath(); x.ellipse(W/2, H*1.08, W*0.66, H*0.5, 0, Math.PI, 2*Math.PI); x.fill();
+  x.strokeStyle = "rgba(255,255,255,.55)"; x.lineWidth = 3; x.beginPath(); x.ellipse(W/2, H*1.08, W*0.6, H*0.44, 0, Math.PI, 2*Math.PI); x.stroke();
+
+  /* frame */
+  const PX = 250, PW = W - 2*PX, inner = 22;
+  const bodyH = 92 + 12 + 2*(80 + ROWS*ROW + 6) + 74;
+  const PY = Math.round((H - bodyH - 2*inner) / 2), PH = bodyH + 2*inner;
+  x.save(); x.shadowColor = "rgba(0,0,0,.55)"; x.shadowBlur = 40; x.shadowOffsetY = 12;
+  x.fillStyle = lin(PY, PY+PH, [[0,"#F7F7F7"],[0.5,"#9EA3A8"],[1,"#E9EBED"]]); rrect(PX, PY, PW, PH, 46); x.fill(); x.restore();
+  x.fillStyle = "#1B1F24"; rrect(PX+10, PY+10, PW-20, PH-20, 38); x.fill();
+  const IX = PX + inner, IW = PW - 2*inner; let y = PY + inner;
+
+  /* header */
+  x.fillStyle = lin(y, y+92, [[0,"#FFFFFF"],[0.55,"#E4E6E9"],[1,"#B9BEC4"]]); rrect(IX+24, y, IW-48, 92, [0,0,26,26]); x.fill();
+  text("MATCH SUMMARY", W/2, y+48, D("700",68), "#111111", "center");
+  y += 92 + 12;
+
+  const themes = [
+    {band:["#0A2E78","#1D63CF","#0A2E78"], rowA:"#14479E", rowB:"#1A55B8"},
+    {band:["#0B4A22","#2A8F45","#0B4A22"], rowA:"#17602D", rowB:"#1C6F35"}
+  ];
+  [0,1].forEach(i=>{
+    const inn = S.innings[i], st = stats(inn), th = themes[i];
+    /* team band */
+    x.fillStyle = linX(IX, IX+IW, [[0,th.band[0]],[0.5,th.band[1]],[1,th.band[2]]]); x.fillRect(IX, y, IW, 80);
+    x.fillStyle = "rgba(255,255,255,.35)"; x.fillRect(IX, y, IW, 2);
+    const initials = S.teams[i].split(/\s+/).filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase() || "T";
+    x.fillStyle = "#FFFFFF"; x.beginPath(); x.arc(IX+52, y+40, 30, 0, 7); x.fill();
+    text(initials, IX+52, y+42, D("700",30), th.band[0], "center");
+    const score = `${st.runs}-${st.wk}`, ovl = `${oversWord(st.legal)}/${S.overs} Over${S.overs===1?"":"s"}`;
+    x.font = D("700",64); const sW = x.measureText(score).width;
+    x.font = D("400",46); const oW = x.measureText(ovl).width;
+    text(score, IX+IW-30, y+43, D("700",64), "#FFFFFF", "right");
+    x.fillStyle = "#FFFFFF"; x.fillRect(IX+IW-30-sW-28, y+20, 6, 42);
+    text(ovl, IX+IW-30-sW-48, y+43, D("400",46), "#FFFFFF", "right");
+    text(S.teams[i].toUpperCase(), IX+100, y+43, D("700",64), "#FFFFFF", "left", IW-100-sW-oW-130);
+    y += 80;
+    /* rows */
+    const mid = IX + IW/2;
+    if(full()){
+      const bat = topBat(inn, 4), bowl = topBowl(inn, 4);
+      for(let k=0;k<ROWS;k++){
+        const ry = y + k*ROW;
+        x.fillStyle = k%2 ? th.rowB : th.rowA; x.fillRect(IX, ry, IW, ROW-2);
+        const b = bat[k], w = bowl[k];
+        if(b){
+          text(pname(i,b.p).toUpperCase(), IX+28, ry+ROW/2, D("700",38), "#FFFFFF", "left", IW/2-260);
+          text(`${b.r}${b.out?"":"*"}`, mid-150, ry+ROW/2, D("700",38), "#FFFFFF", "center");
+          text(b.b, mid-55, ry+ROW/2, D("600",34), "rgba(255,255,255,.88)", "center");
+        }
+        if(w){
+          text(pname(1-i,w.p).toUpperCase(), mid+28, ry+ROW/2, D("700",38), "#FFFFFF", "left", IW/2-280);
+          text(`${w.w}-${w.r}`, IX+IW-170, ry+ROW/2, D("700",38), "#FFFFFF", "center");
+          text(oversTxt(w.legal), IX+IW-62, ry+ROW/2, D("600",34), "rgba(255,255,255,.88)", "center");
+        }
+      }
+      x.fillStyle = "rgba(255,255,255,.35)"; x.fillRect(mid-2, y, 4, ROWS*ROW-2);
+    } else {
+      const q = quickStats(inn);
+      x.fillStyle = th.rowA; x.fillRect(IX, y, IW, ROW-2);
+      const cells = [["FOURS", q.fours], ["SIXES", q.sixes], ["EXTRAS", q.st.wd+q.st.nb], ["RUN RATE", q.rr]];
+      const cw = IW/4;
+      cells.forEach(([l,v],k)=>{
+        const cx = IX + k*cw + cw/2;
+        text(l, cx, y+28, D("600",26), "rgba(255,255,255,.8)", "center");
+        text(String(v), cx, y+68, D("700",46), "#FFFFFF", "center");
+        if(k) { x.fillStyle = "rgba(255,255,255,.3)"; x.fillRect(IX + k*cw - 1, y+10, 2, ROW-22); }
+      });
+    }
+    y += ROWS*ROW + 6;
+  });
+
+  /* result bar */
+  x.fillStyle = lin(y, y+74, [[0,"#FFFFFF"],[1,"#D5D9DE"]]); rrect(IX, y, IW, 74, [0,0,30,30]); x.fill();
+  text(resultTxt().toUpperCase(), W/2, y+39, D("700",52), "#111111", "center", IW-80);
+
+  /* footer */
+  text([sideTxt().toUpperCase(), `${S.overs} OVER${S.overs===1?"":"S"}`, S.toss].filter(Boolean).join("  ·  "), PX+30, PY+PH+44, D("600",34), "rgba(255,255,255,.92)", "left", PW-360);
+  text("GULLY SCORER", PX+PW-30, PY+PH+42, D("700",30), "rgba(255,255,255,.85)", "right");
+
+  c.toBlob(b=>{
+    if(!b) return;
+    sumBlob = b;
+    if(sumUrl) URL.revokeObjectURL(sumUrl);
+    sumUrl = URL.createObjectURL(b);
+    $("sumImg").src = sumUrl; $("saveImg").href = sumUrl;
+  }, "image/png");
+}
+$("shareImg").onclick = async ()=>{
+  if(!sumBlob) return;
+  const file = new File([sumBlob], "match-summary.png", {type:"image/png"}), text = scoreText();
+  const withText = {files:[file], text}, onlyFile = {files:[file]};
+  if(navigator.canShare && (navigator.canShare(withText) || navigator.canShare(onlyFile))){
+    try{ await navigator.share(navigator.canShare(withText) ? withText : onlyFile); }catch(e){}
+  } else {
+    $("saveImg").hidden = false;
+    $("imgNote").textContent = "This browser can't share images directly. Tap Save image, or long-press the image, then send it on WhatsApp.";
+  }
+};
+
+function renderCard(){
+  if(!full()){ $("scWrap").hidden = true; return; }
+  $("scWrap").hidden = false;
+  let h = "";
+  [0,1].forEach(i=>{
+    const inn = S.innings[i]; if(!inn.balls.length && inn.str==null) return;
+    const st = stats(inn);
+    h += `<h3>${esc(S.teams[i])} ${st.runs}/${st.wk} (${oversTxt(st.legal)} ov)</h3>`;
+    const batted = [];
+    inn.balls.forEach(b=>{ if(b.s!=null && !batted.includes(b.s)) batted.push(b.s); if(b.out!=null && !batted.includes(b.out)) batted.push(b.out); });
+    [inn.str, inn.non].forEach(p=>{ if(p!=null && !batted.includes(p)) batted.push(p); });
+    h += `<div class="tw"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th></tr></thead><tbody>`;
+    batted.forEach(p=>{
+      const f = batFig(inn,p);
+      const how = f.out ? (f.out.wt==="r" ? "run out" : "b " + pname(1-i, f.out.bw)) : (!inn.done && (p===inn.str||p===inn.non) ? "batting" : "not out");
+      h += `<tr><td>${esc(pname(i,p))}<span class="how">${esc(how)}</span></td><td>${f.r}</td><td>${f.b}</td><td>${f.f}</td><td>${f.s}</td></tr>`;
+    });
+    h += `<tr><td>Extras</td><td colspan="4">${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})</td></tr></tbody></table></div>`;
+    const bowled = []; inn.balls.forEach(b=>{ if(b.bw!=null && !bowled.includes(b.bw)) bowled.push(b.bw); });
+    if(bowled.length){
+      h += `<div class="tw"><table><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr></thead><tbody>`;
+      bowled.forEach(p=>{ const f = bowlFig(inn,p); const ec = f.legal ? (f.r/(f.legal/6)).toFixed(1) : "–";
+        h += `<tr><td>${esc(pname(1-i,p))}</td><td>${oversTxt(f.legal)}</td><td>${f.r}</td><td>${f.w}</td><td>${ec}</td></tr>`; });
+      h += `</tbody></table></div>`;
+    }
+  });
+  $("sc").innerHTML = h || `<p class="note">The scorecard fills in as the match goes on.</p>`;
+}
+
+/* selection panel for openers, new batter, new bowler, and how a batter got out */
+function opt(sel, value, text){ const o=document.createElement("option"); o.value=value; o.textContent=text; sel.appendChild(o); }
+function selectBox(id, label, team, list){
+  const l = document.createElement("label"); l.htmlFor = id; l.textContent = label;
+  const s = document.createElement("select"); s.id = id; opt(s, "", "Choose…");
+  list.forEach(p=>opt(s, p, pname(team,p))); l.appendChild(s); return l;
+}
+function renderPick(nd){
+  const box = $("pick");
+  if(held){
+    const inn = S.innings[S.cur], i = S.cur;
+    box.hidden = false; box.innerHTML = "";
+    const t = document.createElement("div"); t.className="ttl"; t.textContent = "How was the batter out?"; box.appendChild(t);
+    const btns = document.createElement("div"); btns.className = "btns";
+    const add = (txt, out, wt, cls) => { const b=document.createElement("button"); b.className="btn "+(cls||""); b.textContent=txt; b.onclick=()=>finishWicket(out,wt); btns.appendChild(b); };
+    if(!freeHitNext(inn)) add(`${pname(i,inn.str)} out (bowled, caught, lbw, stumped)`, inn.str, "b");
+    else { const n = document.createElement("p"); n.className = "note"; n.textContent = "Free hit: only a run out counts."; box.appendChild(n); }
+    add(`${pname(i,inn.str)} run out`, inn.str, "r", "ghost");
+    if(!S.oneSide && inn.non!=null) add(`${pname(i,inn.non)} run out`, inn.non, "r", "ghost");
+    const c=document.createElement("button"); c.className="btn ghost small"; c.textContent="Cancel"; c.onclick=()=>{ held=null; render(); }; btns.appendChild(c);
+    box.appendChild(btns); return;
+  }
+  if(!nd){ box.hidden = true; box.innerHTML = ""; return; }
+  const i = S.cur, inn = S.innings[i], outs = outSet(inn);
+  const free = S.players[i].map((_,p)=>p).filter(p=>!outs.has(p) && p!==inn.str && p!==inn.non);
+  const bowlers = S.players[1-i].map((_,p)=>p).filter(p=> S.players[1-i].length<2 || p!==inn.prev);
+  box.hidden = false; box.innerHTML = "";
+  const t = document.createElement("div"); t.className="ttl";
+  t.textContent = nd==="open" ? `${S.teams[i]} innings: pick the openers and bowler` : nd==="bat" ? "New batter coming in" : "New over: pick the bowler";
+  box.appendChild(t);
+  const g = document.createElement("div"); g.style.cssText="display:flex;flex-direction:column;gap:10px";
+  if(nd==="open"){ g.appendChild(selectBox("selStr", S.oneSide ? "Batter" : "Striker", i, free)); if(!S.oneSide) g.appendChild(selectBox("selNon","Non-striker",i,free)); }
+  else if(nd==="bat") g.appendChild(selectBox("selBat", inn.str==null ? "On strike" : "Non-striker", i, free));
+  if(inn.bw==null) g.appendChild(selectBox("selBowl","Bowler ("+S.teams[1-i]+")",1-i,bowlers));
+  box.appendChild(g);
+  const err = document.createElement("div"); err.className="err"; err.id="pickErr"; box.appendChild(err);
+  const ok = document.createElement("button"); ok.className="btn"; ok.textContent="Confirm"; ok.onclick=confirmPick; box.appendChild(ok);
+  box.querySelectorAll("select").forEach(s=>s.addEventListener("change",()=>err.textContent=""));
+}
+function confirmPick(){
+  const inn = S.innings[S.cur], v = id => $(id) ? $(id).value : null, err = $("pickErr");
+  const a = v("selStr"), b = v("selNon"), c = v("selBat"), d = v("selBowl");
+  if(a!==null && a===""){ err.textContent = S.oneSide ? "Choose the batter." : "Choose the striker."; return; }
+  if(b!==null && b===""){ err.textContent="Choose the non-striker."; return; }
+  if(b!==null && a===b){ err.textContent="Striker and non-striker must be different players."; return; }
+  if(c!==null && c===""){ err.textContent="Choose the new batter."; return; }
+  if(d!==null && d===""){ err.textContent="Choose the bowler."; return; }
+  if(a!==null){ inn.str=+a; inn.non = b!==null ? +b : null; }
+  if(c!==null){ if(inn.str==null) inn.str=+c; else inn.non=+c; }
+  if(d!==null) inn.bw=+d;
+  commit();
+}
+
+/* ---------- scorer actions ---------- */
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify({at:Date.now(), S, k:K, sk:SK, sid:SID})); }catch(e){} }
+function commit(){ S.u = Date.now(); S.v = (S.v||0) + 1; save(); render(); broadcast(); }
+function push(ball){
+  const inn = S.innings[S.cur];
+  if(full()){ ball.pre = {str:inn.str, non:inn.non, bw:inn.bw, prev:inn.prev}; ball.s = inn.str; ball.bw = inn.bw; }
+  inn.balls.push(ball); pending = null; pw = false;
+  if(inningsOver(S.cur)){ inn.done = true; if(S.cur===1) S.done = true; }
+  if(full()) advance(inn, ball);
+  commit();
+}
+function addBall(r){
+  const inn = S.innings[S.cur]; if(S.done || inn.done || need(S.cur)) return;
+  const ball = {r, x:pending, w:pw};
+  if(pw && full()){ held = ball; render(); return; }
+  if(pw && freeHitNext(inn)) ball.wt = "r";
+  push(ball);
+}
+function finishWicket(out, wt){
+  if(freeHitNext(S.innings[S.cur])) wt = "r"; const b = held; held = null; b.out = out; b.wt = wt; push(b); }
+function canUndo(){
+  if(held) return false;
+  const i = S.cur, inn = S.innings[i];
+  const ok = b => !full() || !!b.pre;
+  if(inn.balls.length) return ok(inn.balls[inn.balls.length-1]);
+  const p = S.innings[0].balls;
+  return i===1 && p.length>0 && ok(p[p.length-1]);
+}
+function undo(){
+  if(!canUndo()) return;
+  let inn = S.innings[S.cur];
+  if(!inn.balls.length && S.cur===1){ Object.assign(inn,{str:null,non:null,bw:null,prev:null}); S.cur = 0; inn = S.innings[0]; }
+  if(!inn.balls.length) return;
+  const b = inn.balls.pop(); if(b.pre) Object.assign(inn, b.pre);
+  inn.done = false; S.done = false; pending = null; pw = false; held = null; commit();
+}
+document.querySelectorAll("#pad [data-r]").forEach(b=> b.addEventListener("click",()=>addBall(+b.dataset.r)));
+$("wdBtn").onclick = ()=>{
+  if(S.simple){ pending = "wd"; pw = false; addBall(0); return; }
+  pending = pending==="wd"?null:"wd"; render();
+};
+$("nbBtn").onclick = ()=>{ pending = pending==="nb"?null:"nb"; render(); };
+$("wkBtn").onclick = ()=>{
+  if(S.simple){ if(pending==="wd") pending = null; pw = true; addBall(0); return; }
+  pw = !pw; render();
+};
+$("undoBtn").onclick = undo;
+$("nextInn").onclick = ()=>{ S.cur = 1; commit(); };
+$("swapBtn").onclick = ()=>{ const inn=S.innings[S.cur]; [inn.str,inn.non]=[inn.non,inn.str]; commit(); };
+$("chgBowl").onclick = ()=>{ const inn=S.innings[S.cur]; inn.bw = null; commit(); };
+
+/* ---------- toss ---------- */
+let tossText = "", tossWin = null;
+const teamNames = () => [$("t1").value.trim() || "Team A", $("t2").value.trim() || "Team B"];
+function fillCaller(){
+  const s = $("caller"), v = s.value || "0"; s.innerHTML = "";
+  teamNames().forEach((n,i)=>opt(s, i, n)); s.value = v;
+}
+fillCaller();
+["t1","t2"].forEach(id=>$(id).addEventListener("input", fillCaller));
+document.querySelectorAll("[data-call]").forEach(b=>b.addEventListener("click",()=>{
+  const call = b.dataset.call, side = (crypto.getRandomValues(new Uint8Array(1))[0] & 1) ? "H" : "T";
+  const caller = +$("caller").value, names = teamNames();
+  tossWin = call===side ? caller : 1-caller; tossText = "";
+  const coin = $("coin"), reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  document.querySelectorAll("[data-call]").forEach(x=>x.disabled = true);
+  $("choose").hidden = true; coin.textContent = "?"; $("tossMsg").textContent = "Flipping…";
+  coin.classList.remove("spin"); void coin.offsetWidth; coin.classList.add("spin");
+  setTimeout(()=>{
+    coin.textContent = side; coin.classList.remove("spin");
+    $("tossMsg").textContent = `${side==="H"?"Heads":"Tails"}! ${names[tossWin]} won the toss.`;
+    $("chBat").textContent = `${names[tossWin]} bat first`; $("chBowl").textContent = `${names[tossWin]} bowl first`;
+    $("choose").hidden = false;
+    document.querySelectorAll("[data-call]").forEach(x=>x.disabled = false);
+  }, reduce ? 50 : 900);
+}));
+function tossChoice(bat){
+  const names = teamNames(), name = names[tossWin];
+  if((tossWin===1) === bat){
+    [$("t1").value, $("t2").value] = [$("t2").value, $("t1").value];
+    [$("p1").value, $("p2").value] = [$("p2").value, $("p1").value];
+    ["t1","t2"].forEach(id=>$(id).dispatchEvent(new Event("input")));
+  }
+  tossText = `${name} won the toss and chose to ${bat ? "bat" : "bowl"}`;
+  $("tossMsg").textContent = tossText + ". Teams are set below.";
+  $("choose").hidden = true;
+}
+$("chBat").onclick = ()=>tossChoice(true);
+$("chBowl").onclick = ()=>tossChoice(false);
+
+/* ---------- setup ---------- */
+function syncMode(){
+  const f = $("mFull").checked;
+  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("oneSideLab").hidden = !f; $("lastManLab").hidden = f && $("oneSide").checked; $("paLab").hidden = f;
+  $("setupErr").textContent = "";
+}
+$("mQuick").addEventListener("change", syncMode); $("mFull").addEventListener("change", syncMode); $("oneSide").addEventListener("change", syncMode);
+$("t1").addEventListener("input",()=>{ $("p1").previousSibling.textContent = ($("t1").value.trim()||"Team A")+" players"; });
+$("t2").addEventListener("input",()=>{ $("p2").previousSibling.textContent = ($("t2").value.trim()||"Team B")+" players"; });
+function roster(text){
+  const list = text.split("\n").map(s=>s.trim().slice(0,20)).filter(Boolean);
+  return list.length ? list : ["Player 1","Player 2","Player 3","Player 4","Player 5","Player 6"];
+}
+$("setupForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const fail = m => { $("setupErr").textContent = m; };
+  const mode = $("mFull").checked ? "full" : "quick";
+  const t1=$("t1").value.trim(), t2=$("t2").value.trim(), ov=+$("ov").value, pa=+$("pa").value;
+  if(!t1 || !t2) return fail("Enter both team names.");
+  if(t1.toLowerCase()===t2.toLowerCase()) return fail("Team names must be different.");
+  if(!(ov>=1 && ov<=50)) return fail("Overs must be between 1 and 50.");
+  let players = [[],[]];
+  if(mode==="full"){
+    players = [roster($("p1").value), roster($("p2").value)];
+    for(const [k,list] of players.entries()){
+      const tn = k ? t2 : t1;
+      if(list.length<2) return fail(`${tn} needs at least 2 players.`);
+      if(list.length>15) return fail(`${tn} has more than 15 players.`);
+      if(new Set(list.map(s=>s.toLowerCase())).size!==list.length) return fail(`${tn} has the same name twice. Make each name different.`);
+    }
+  } else if(!(Number.isInteger(pa) && pa>=2 && pa<=15)) return fail("Players a side must be between 2 and 15.");
+  const abc="abcdefghjkmnpqrstuvwxyz23456789", rnd=new Uint8Array(20); crypto.getRandomValues(rnd);
+  let id=""; for(const v of rnd) id+=abc[v%abc.length];
+  const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
+  K = b64e(crypto.getRandomValues(new Uint8Array(16)));
+  saveSettings();
+  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: !(mode==="full" && $("oneSide").checked) && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, fh: $("fh").checked, teams:[t1,t2], overs:ov, size: mode==="full" ? 0 : pa, wickets: mode==="full" ? 1 : ($("lastMan").checked ? pa : pa-1), cur:0, done:false, innings:[blank(), blank()]};
+  Promise.all([importKey(K), makeSigner()]).then(([k])=>{ cryptoKey = k; startScorer(true); })
+    .catch(()=>fail("This browser can't start a secure match. Update the browser and try again."));
+});
+["t1","t2","ov","pa","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
+
+/* ---------- remember last match settings (this phone only) ---------- */
+const SETKEY = "gullySettings", FIELDS = ["t1","t2","p1","p2","ov","pa"], CHECKS = ["oneSide","lastMan","wr","nr","simple","fh"];
+function saveSettings(){
+  try{
+    if(!$("remember").checked){ localStorage.removeItem(SETKEY); return; }
+    const o = {mode: $("mFull").checked ? "full" : "quick"};
+    FIELDS.forEach(f=>o[f] = $(f).value); CHECKS.forEach(c=>o[c] = $(c).checked);
+    localStorage.setItem(SETKEY, JSON.stringify(o));
+  }catch(e){}
+}
+function loadSettings(){
+  let o = null; try{ o = JSON.parse(localStorage.getItem(SETKEY)||"null"); }catch(e){}
+  if(!o || typeof o!=="object") return;
+  $(o.mode==="full" ? "mFull" : "mQuick").checked = true;
+  FIELDS.forEach(f=>{ if(typeof o[f]==="string") $(f).value = o[f].slice(0, f[0]==="p" ? 400 : 20); });
+  CHECKS.forEach(c=>{ if(typeof o[c]==="boolean") $(c).checked = o[c]; });
+  ["t1","t2"].forEach(id=>$(id).dispatchEvent(new Event("input")));
+  syncMode(); $("savedNote").hidden = false;
+}
+syncMode();
+$("resetSet").onclick = ()=>{ try{ localStorage.removeItem(SETKEY); }catch(e){} location.reload(); };
+$("swapTeams").onclick = ()=>{
+  [$("t1").value, $("t2").value] = [$("t2").value, $("t1").value];
+  [$("p1").value, $("p2").value] = [$("p2").value, $("p1").value];
+  ["t1","t2"].forEach(id=>$(id).dispatchEvent(new Event("input")));
+};
+/* a phone that takes over scoring also keeps the match settings for the next match */
+function keepSettingsFrom(m){
+  try{
+    const o = {mode:m.mode, t1:m.teams[0], t2:m.teams[1], p1:(m.players[0]||[]).join("\n"), p2:(m.players[1]||[]).join("\n"),
+      ov:String(m.overs), pa:String(m.size || (m.mode==="full" ? 6 : (m.lastMan ? m.wickets : m.wickets+1))), oneSide:!!m.oneSide, lastMan:!!m.lastMan, wr:m.wr!==false, nr:m.nr!==false, simple:!!m.simple, fh:m.fh!==false};
+    localStorage.setItem(SETKEY, JSON.stringify(o));
+  }catch(e){}
+}
+loadSettings();
+
+let armT = null;
+$("endBtn").onclick = ()=>{
+  const b = $("endBtn");
+  if(!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent="Tap again to delete the match"; armT=setTimeout(()=>{b.classList.remove("armed"); b.textContent="End match and delete";},4000); return; }
+  clearTimeout(armT);
+  b.disabled = true; b.textContent = "Ending match…";
+  const done = ()=>{ try{ localStorage.removeItem(KEY); }catch(e){} location.hash=""; location.reload(); };
+  seal({t:"end", sid:SID}).then(body=>relaySend(topic(), body)).catch(()=>{}).finally(done);
+};
+
+const baseUrl = () => location.href.split("#")[0];
+const watchLink = () => `${baseUrl()}#watch-${S.id}.${K}.${SK.x}.${SK.y}`;
+const handLink = () => `${baseUrl()}#score-${S.id}.${K}.${SK.x}.${SK.y}.${SK.d}`;
+function startScorer(fresh){
+  $("setup").hidden = true; $("viewerNote").hidden = true;
+  ["boardWrap","scorer","shareCard","endCard","handCard"].forEach(id=>$(id).hidden=false);
+  const link = watchLink();
+  $("linkTxt").textContent = link;
+  $("waBtn").href = "https://wa.me/?text=" + encodeURIComponent(`Live score: ${S.teams[0]} vs ${S.teams[1]} ${link}`);
+  $("qr").innerHTML = "";
+  try{ new QRCode($("qr"), {text:link, width:132, height:132, colorDark:"#000000", colorLight:"#ffffff"}); }catch(e){ $("qr").hidden = true; }
+  $("handTxt").textContent = handLink(); $("qr2").innerHTML = ""; $("handCard").open = false;
+  $("waHand").href = "https://wa.me/?text=" + encodeURIComponent(`Take over scoring for ${S.teams[0]} vs ${S.teams[1]}. Open this link on your phone. Please don't forward it, anyone with it can change the score: ${handLink()}`);
+  keepAwake();
+  if(fresh) commit(); else { render(); broadcast(); }
+  watchTakeover();
+}
+$("handCard").addEventListener("toggle",()=>{
+  if(!$("handCard").open || $("qr2").childNodes.length) return;
+  try{ new QRCode($("qr2"), {text:handLink(), width:132, height:132, colorDark:"#000000", colorLight:"#ffffff", correctLevel:QRCode.CorrectLevel.L}); }catch(e){ $("qr2").hidden = true; }
+});
+$("copyHand").onclick = ()=>copyText(handLink(), $("copyHand"), $("handTxt"));
+function copyText(text, btn, shown){
+  const label = btn.textContent;
+  navigator.clipboard.writeText(text).then(()=>{ btn.textContent="Copied"; setTimeout(()=>btn.textContent=label,1500); })
+    .catch(()=>{ shown.hidden = false; const r=document.createRange(); r.selectNodeContents(shown); const s=getSelection(); s.removeAllRanges(); s.addRange(r); });
+}
+$("copyBtn").onclick = ()=>copyText($("linkTxt").textContent, $("copyBtn"), $("linkTxt"));
+
+/* ---------- keep scorer screen on ---------- */
+async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState!=="visible" || !S || isViewer) return;
+  keepAwake();
+  checkTakeover().then(taken=>{ if(!taken) broadcast(); });
+});
+
+/* ---------- live sharing: encrypted updates through the relay ---------- */
+function setNet(txt, cls){ const n=$("net"); n.textContent=txt; n.className="chip "+(cls||""); }
+let sendTimer = null, sending = false, dirty = false;
+function broadcast(){ dirty = true; if(!sendTimer) sendTimer = setTimeout(flush, 700); }
+function later(ms){ if(!sendTimer) sendTimer = setTimeout(flush, ms); }
+function slim(){ const c = JSON.parse(JSON.stringify(S)); c.innings.forEach(inn=>inn.balls.forEach(b=>{ delete b.pre; })); return c; }
+async function flush(){
+  sendTimer = null;
+  if(sending || !dirty || !cryptoKey || !signKey || isViewer) return;
+  sending = true; dirty = false;
+  try{
+    const body = await seal({t:"state", s:slim(), sid:SID});
+    const r = await relaySend(topic(), body);
+    if(r.status===429){ dirty = true; setNet("Busy · retrying","warn"); later(10000); }
+    else if(!r.ok) throw new Error("relay " + r.status);
+    else { setNet("Live","live"); $("watchers").textContent = "Live. Viewers get each ball within a second or two."; }
+  }catch(e){ dirty = true; setNet("Offline · will resend","warn"); $("watchers").textContent = "No internet. The latest score is sent as soon as you're back online."; later(4000); }
+  sending = false;
+  if(dirty) later(1200);
+}
+window.addEventListener("online", ()=>{ if(S && !isViewer) broadcast(); });
+
+async function decodeMsg(m){
+  if(!m || m.event!=="message") return null;
+  let txt = m.message;
+  if(m.attachment && typeof m.attachment.url==="string" && m.attachment.url.startsWith(RELAY)){
+    try{ txt = await (await fetch(m.attachment.url, {referrerPolicy:"no-referrer"})).text(); }catch(e){ return null; }
+  }
+  try{ return await unseal(txt); }catch(e){ return null; }
+}
+/* a message pushed over the live connection */
+async function wsData(data){
+  if(typeof data!=="string") return null;
+  if(OWN_RELAY){ if(data==="pong") return null; try{ return await unseal(data); }catch(e){ return null; } }
+  let m; try{ m = JSON.parse(data); }catch(e){ return null; }
+  return decodeMsg(m);
+}
+async function latest(T){
+  if(OWN_RELAY){
+    const r = await fetch(`${OWN_RELAY}/t/${T}/latest`, {referrerPolicy:"no-referrer", cache:"no-store"});
+    if(!r.ok) throw new Error("relay " + r.status);
+    const txt = await r.text();
+    try{ return txt ? await unseal(txt) : null; }catch(e){ return null; }
+  }
+  const r = await fetch(RELAY + T + "/json?poll=1&since=latest", {referrerPolicy:"no-referrer"});
+  if(!r.ok) throw new Error("relay " + r.status);
+  let last = null;
+  for(const l of (await r.text()).trim().split("\n").filter(Boolean)){ try{ const d = await decodeMsg(JSON.parse(l)); if(d) last = d; }catch(e){} }
+  return last;
+}
+
+/* ---------- handover: another phone took over, so this one steps back ---------- */
+const takenBy = d => !!(d && d.sid && d.sid!==SID && (d.t==="end" || (d.t==="state" && d.s && (d.s.v||0) > (S.v||0))));
+function yieldScoring(){
+  if(isViewer) return;
+  isViewer = true;
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  try{ sessionStorage.setItem("gullyMoved","1"); }catch(e){}
+  try{ scorerWs && scorerWs.close(); }catch(e){}
+  location.replace(watchLink()); location.reload();
+}
+async function checkTakeover(){
+  try{ if(takenBy(await latest(topic()))){ yieldScoring(); return true; } }catch(e){}
+  return false;
+}
+let scorerWs = null;
+function watchTakeover(){
+  if(isViewer || !S || scorerWs) return;
+  try{ scorerWs = relaySocket(topic()); }catch(e){ setTimeout(watchTakeover, 5000); return; }
+  scorerWs.onmessage = async e=>{ if(takenBy(await wsData(e.data))) yieldScoring(); };
+  scorerWs.onclose = ()=>{ scorerWs = null; if(!isViewer) setTimeout(watchTakeover, 5000); };
+}
+async function takeOver(id, k, x, y, d){
+  isViewer = false;
+  $("setup").hidden = true; $("viewerNote").hidden = false;
+  setNet("Taking over…","warn"); $("viewerMsg").textContent = "Loading the match from the scorer's last update…";
+  try{ K = k; cryptoKey = await importKey(k); await loadSigner(x, y, d); }
+  catch(e){ setNet("Bad link","bad"); $("viewerMsg").textContent = "This handover link is incomplete. Ask the scorer to send it again."; return; }
+  let got = null;
+  try{ got = await latest(PREFIX + id); }catch(e){ setNet("No connection","bad"); $("viewerMsg").textContent = "No internet on this phone. Connect and open the handover link again."; return; }
+  if(got && got.t==="end"){ setNet("Match ended",""); $("viewerMsg").textContent = "This match has already ended."; return; }
+  const c = got && got.t==="state" ? clean(got.s) : null;
+  if(!c || c.id!==id){ setNet("Not found","bad"); $("viewerMsg").textContent = "Couldn't load this match yet. Ask the scorer to keep their screen open for a few seconds, then open the handover link again."; return; }
+  history.replaceState(null, "", location.pathname + location.search);
+  S = c; keepSettingsFrom(c); startScorer(true);
+  setNet("You're scoring","live");
+}
+
+async function startViewer(id, k, x, y){
+  isViewer = true;
+  $("setup").hidden = true; $("boardWrap").hidden = false; $("viewerNote").hidden = false;
+  const VKEY = "gullyView-"+id;
+  S = null;
+  $("board").innerHTML = `<div class="bteam"><span>Live score</span></div><div class="prev">Waiting for the scorer's first update…</div>`;
+  try{ cryptoKey = await importKey(k); await loadSigner(x, y); }catch(e){ setNet("Bad link","bad"); $("viewerMsg").textContent = "This link is incomplete. Ask the scorer to send it again."; return; }
+  try{ const c = clean(JSON.parse(localStorage.getItem(VKEY)||"null")); if(c && Date.now()-c.u < TTL){ S=c; render(); } }catch(e){}
+  const keep = ()=>{ try{ localStorage.setItem(VKEY, JSON.stringify(S)); }catch(e){} };
+  const offline = msg=>{ $("viewerMsg").textContent = (S ? "Showing the last score. " : "") + msg; };
+  const T = PREFIX + id;
+  let lastV = S ? (S.v||0) : 0, ended = false, ws = null, backoff = 2000, moved = false;
+  try{ moved = sessionStorage.getItem("gullyMoved")==="1"; sessionStorage.removeItem("gullyMoved"); }catch(e){}
+  const liveMsg = ()=> moved ? "Scoring was handed to another phone. This phone now shows the live score." : "Watching live. The score updates by itself.";
+  const handle = d=>{
+    if(!d || ended) return;
+    if(d.t==="end"){
+      ended = true; try{ localStorage.removeItem(VKEY); }catch(e){}
+      setNet("Match ended",""); $("viewerMsg").textContent = "The scorer ended this match.";
+      try{ ws && ws.close(); }catch(e){} return;
+    }
+    if(d.t==="state"){
+      const c = clean(d.s);
+      if(c && (c.v||0) >= lastV){ lastV = c.v||0; S = c; render(); keep(); setNet("Live","live"); $("viewerMsg").textContent = liveMsg(); }
+    }
+  };
+  const poll = async ()=>{
+    try{
+      handle(await latest(T));
+      if(!S && !ended){ setNet("Waiting…","warn"); offline("Waiting for the scorer's first update. Updates appear here automatically."); }
+    }catch(e){ setNet("No connection","bad"); offline("No internet on this phone. Retrying…"); }
+  };
+  const open = ()=>{
+    if(ended) return;
+    try{ ws = relaySocket(T); }catch(e){ setTimeout(open, backoff); return; }
+    ws.onopen = ()=>{ backoff = 2000; };
+    ws.onmessage = async e=>{ if(!ended) handle(await wsData(e.data)); };
+    ws.onclose = ()=>{ if(ended) return; backoff = Math.min(backoff*2, 30000); setTimeout(()=>{ poll(); open(); }, backoff); };
+  };
+  setNet("Connecting…","warn");
+  await poll(); open();
+  setInterval(()=>{ if(!ended && document.visibilityState==="visible") poll(); }, 30000);
+  document.addEventListener("visibilitychange",()=>{
+    if(document.visibilityState!=="visible" || ended) return;
+    poll(); if(!ws || ws.readyState > 1) open();
+  });
+}
+
+/* ---------- boot ---------- */
+(async function boot(){
+  const ID = "([a-z0-9]{10,24})", K22 = "([A-Za-z0-9_-]{22})", P43 = "([A-Za-z0-9_-]{43})";
+  let m = location.hash.match(new RegExp(`^#watch-${ID}\\.${K22}\\.${P43}\\.${P43}$`));
+  if(m){ startViewer(m[1], m[2], m[3], m[4]); return; }
+  m = location.hash.match(new RegExp(`^#score-${ID}\\.${K22}\\.${P43}\\.${P43}\\.${P43}$`));
+  if(m){ takeOver(m[1], m[2], m[3], m[4], m[5]); return; }
+  if(/^#(watch|score)-/.test(location.hash)){ $("setup").hidden = true; $("viewerNote").hidden = false; setNet("Old link","bad"); $("viewerMsg").textContent = "This link is from an older version. Ask the scorer to share the link again."; return; }
+  try{
+    const saved = JSON.parse(localStorage.getItem(KEY)||"null");
+    const c = saved && Date.now()-saved.at < TTL ? clean(saved.S) : null;
+    if(c && c.id && typeof saved.k==="string" && /^[A-Za-z0-9_-]{22}$/.test(saved.k)){
+      K = saved.k; cryptoKey = await importKey(K);
+      const sk = saved.sk;
+      if(sk && B43.test(sk.x||"") && B43.test(sk.y||"") && B43.test(sk.d||"")) await loadSigner(sk.x, sk.y, sk.d); else await makeSigner();
+      if(typeof saved.sid==="string" && /^[A-Za-z0-9_-]{8}$/.test(saved.sid)) SID = saved.sid;
+      S = c;
+      if(await checkTakeover()) return;
+      startScorer(false); return;
+    }
+    localStorage.removeItem(KEY);
+  }catch(e){}
+})();
+</script>

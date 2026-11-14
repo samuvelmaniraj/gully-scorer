@@ -1,0 +1,2 @@
+# GitHub Pages: publish only the app itself
+exclude: [src, tools, tests, docs, worker, CLAUDE.md, README.md]
