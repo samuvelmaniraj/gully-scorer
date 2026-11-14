@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-FdtbHlT941ll/+Nd1wLtAGd4/p8yyxQaoVsmDvbiIGI=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QAs1+8VapRP6DPzEOr3/4yVYYNgtDEZLFoxyadqDeqs=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -243,12 +243,12 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
 
   <section id="finalCard" class="card" hidden>
     <h2>Match summary</h2>
-    <img id="sumImg" class="sumimg" alt="Match summary graphic" width="1080" height="1350">
+    <img id="sumImg" class="sumimg" alt="Match summary graphic" width="1920" height="1080">
     <div class="btns">
       <button class="btn" id="shareImg">Share summary image</button>
       <a class="btn ghost" id="saveImg" download="match-summary.png" style="text-decoration:none;text-align:center" hidden>Save image</a>
     </div>
-    <p class="note" id="imgNote">Choose WhatsApp in the share menu. You can also long-press the image to save it.</p>
+    <p class="note" id="imgNote">Choose WhatsApp in the share menu. The summary text is added under the image, so it still reads if the image doesn't load.</p>
     <div class="btns">
       <a class="btn ghost small" id="waCard" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Send as text</a>
       <button class="btn ghost small" id="copyCard">Copy text</button>
@@ -508,26 +508,47 @@ function render(){
   }
 }
 
-/* plain-text scorecard for WhatsApp: works for Quick and Full matches */
+/* plain-text scorecard for WhatsApp: a monospace table that reads well on a phone */
+const padE = (s,n)=>{ s = String(s); return s.length > n ? s.slice(0, n-1) + "…" : s.padEnd(n); };
+const padS = (s,n)=>String(s).padStart(n);
+const oversWord = l => { const t = oversTxt(l); return t.endsWith(".0") ? t.slice(0,-2) : t; };
+function topBat(inn, n){ return battedList(inn).map(p=>({p, ...batFig(inn,p)})).sort((a,b)=>b.r-a.r || a.b-b.b).slice(0,n); }
+function topBowl(inn, n){ return bowledList(inn).map(p=>({p, ...bowlFig(inn,p)})).sort((a,b)=>b.w-a.w || a.r-b.r).slice(0,n); }
+function quickStats(inn){
+  const st = stats(inn); let fours = 0, sixes = 0;
+  inn.balls.forEach(b=>{ if(b.x!=="wd"){ if(b.r===4) fours++; if(b.r===6) sixes++; } });
+  return {st, fours, sixes, rr: st.legal ? (st.runs/(st.legal/6)).toFixed(2) : "0.00"};
+}
 function scoreText(){
-  const L = [`*${S.teams[0]} vs ${S.teams[1]}*`];
-  if(S.toss) L.push(S.toss);
-  [0,1].forEach(i=>{
-    const inn = S.innings[i]; if(!inn.balls.length) return;
-    const st = stats(inn);
-    L.push("", `*${S.teams[i]} ${st.runs}/${st.wk}* (${oversTxt(st.legal)} ov)`);
-    if(full()){
-      const batted = [];
-      inn.balls.forEach(b=>{ if(b.s!=null && !batted.includes(b.s)) batted.push(b.s); if(b.out!=null && !batted.includes(b.out)) batted.push(b.out); });
-      [inn.str, inn.non].forEach(p=>{ if(p!=null && !batted.includes(p)) batted.push(p); });
-      batted.forEach(p=>{ const f = batFig(inn,p); L.push(`${pname(i,p)} ${f.r}${f.out?"":"*"} (${f.b})`); });
-      if(st.wd+st.nb) L.push(`Extras ${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})`);
-      const bowled = []; inn.balls.forEach(b=>{ if(b.bw!=null && !bowled.includes(b.bw)) bowled.push(b.bw); });
-      if(bowled.length){ L.push("Bowling:"); bowled.forEach(p=>{ const f = bowlFig(inn,p); L.push(`${pname(1-i,p)} ${oversTxt(f.legal)}-${f.r}-${f.w}`); }); }
-    } else if(st.wd+st.nb) L.push(`Extras ${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})`);
-  });
-  L.push("", S.done ? `*${resultTxt()}*` : "Match in progress");
-  L.push(`${S.overs} over${S.overs===1?"":"s"} a side · scored with Gully Scorer`);
+  const L = ["*MATCH SUMMARY*", `${S.teams[0]} vs ${S.teams[1]} · ${S.overs} over${S.overs===1?"":"s"} a side`];
+  if(S.toss) L.push(`_${S.toss}_`);
+  if(full()){
+    [0,1].forEach(i=>{
+      const inn = S.innings[i]; if(!inn.balls.length) return;
+      const st = stats(inn);
+      L.push("", `*${S.teams[i].toUpperCase()}  ${st.runs}-${st.wk}*  (${oversWord(st.legal)} ov)`);
+      const t = ["```", padE("Batter",13) + padS("R",4) + padS("B",4)];
+      const cut = (s,n)=> s.length > n ? s.slice(0, n-1) + "…" : s;
+      topBat(inn,4).forEach(r=>t.push(padE(cut(pname(i,r.p),12) + (r.out?"":"*"),13) + padS(r.r,4) + padS(r.b,4)));
+      t.push("", padE("Bowler",13) + padS("W-R",6) + padS("O",5));
+      topBowl(inn,4).forEach(r=>t.push(padE(pname(1-i,r.p),13) + padS(`${r.w}-${r.r}`,6) + padS(oversTxt(r.legal),5)));
+      if(st.wd+st.nb) t.push("", `Extras ${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})`);
+      t.push("```"); L.push(t.join("\n"));
+    });
+  } else {
+    const a = quickStats(S.innings[0]), b = quickStats(S.innings[1]);
+    const row = (k, x, y)=>padE(k,9) + padS(x,8) + padS(y,8);
+    L.push("", ["```",
+      row("", S.teams[0].slice(0,7).toUpperCase(), S.teams[1].slice(0,7).toUpperCase()),
+      row("Score", `${a.st.runs}-${a.st.wk}`, `${b.st.runs}-${b.st.wk}`),
+      row("Overs", oversTxt(a.st.legal), oversTxt(b.st.legal)),
+      row("4s / 6s", `${a.fours}/${a.sixes}`, `${b.fours}/${b.sixes}`),
+      row("Extras", a.st.wd+a.st.nb, b.st.wd+b.st.nb),
+      row("Run rate", a.rr, b.rr),
+      "```"].join("\n"));
+  }
+  L.push("", S.done ? `*${resultTxt().toUpperCase()}*` : "Match in progress");
+  L.push("_Scored with Gully Scorer_");
   return L.join("\n");
 }
 $("copyCard").onclick = ()=>copyText(scoreText(), $("copyCard"), $("cardTxt"));
@@ -542,86 +563,116 @@ function battedList(inn){
 }
 function bowledList(inn){ const out = []; inn.balls.forEach(b=>{ if(b.bw!=null && !out.includes(b.bw)) out.push(b.bw); }); return out; }
 function drawSummary(){
-  const W = 1080, PANEL = full() ? 300 : 180;
-  const H = 200 + 2*(110 + 12 + PANEL + 34) + 130 + 90;
+  const W = 1920, H = 1080, ROWS = full() ? 4 : 1, ROW = full() ? 55 : 100;
   const c = document.createElement("canvas"); c.width = W; c.height = H;
   const x = c.getContext("2d");
   const D = (w,s)=>`${w} ${s}px "Roboto Condensed","Arial Narrow","Helvetica Neue",system-ui,sans-serif`;
-  const T = (w,s)=>`${w} ${s}px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif`;
   const fit = (t, max)=>{ t = String(t); if(x.measureText(t).width <= max) return t; while(t.length>1 && x.measureText(t+"…").width > max) t = t.slice(0,-1); return t + "…"; };
-  const box = (X,Y,w,h,r,fill)=>{ x.beginPath(); if(x.roundRect) x.roundRect(X,Y,w,h,r); else x.rect(X,Y,w,h); x.fillStyle = fill; x.fill(); };
-  const text = (t, X, Y, font, color, align)=>{ x.font = font; x.fillStyle = color; x.textAlign = align || "left"; x.fillText(t, X, Y); x.textAlign = "left"; };
-  x.fillStyle = "#0E1F17"; x.fillRect(0,0,W,H);
-  x.fillStyle = "#11251B"; for(let s=0; s<W; s+=180) x.fillRect(s, 0, 90, H);
-  text("MATCH SUMMARY", 60, 104, D("700",50), "#9BE0B8");
-  x.font = T("500",30);
-  text(fit(`${S.teams[0]} vs ${S.teams[1]} · ${S.overs} over${S.overs===1?"":"s"} a side`, W-120), 60, 152, T("500",30), "rgba(244,247,241,.78)");
-  let y = 200;
+  const rrect = (X,Y,w,h,r)=>{ x.beginPath(); if(x.roundRect) x.roundRect(X,Y,w,h,r); else x.rect(X,Y,w,h); };
+  const lin = (y0,y1,stops)=>{ const g = x.createLinearGradient(0,y0,0,y1); stops.forEach(([o,col])=>g.addColorStop(o,col)); return g; };
+  const linX = (x0,x1,stops)=>{ const g = x.createLinearGradient(x0,0,x1,0); stops.forEach(([o,col])=>g.addColorStop(o,col)); return g; };
+  const text = (t, X, Y, font, color, align, max)=>{ x.font = font; x.fillStyle = color; x.textAlign = align || "left"; x.fillText(max ? fit(t, max) : t, X, Y); x.textAlign = "left"; };
+  x.textBaseline = "middle";
+
+  /* stadium at night: sky, stands, floodlit oval */
+  x.fillStyle = lin(0, H, [[0,"#1B1236"],[0.28,"#5A1E3A"],[0.5,"#1A1A2A"],[1,"#0A1A10"]]); x.fillRect(0,0,W,H);
+  x.fillStyle = "#121520"; x.beginPath(); x.ellipse(W/2, H*0.98, W*0.78, H*0.55, 0, Math.PI, 2*Math.PI); x.fill();
+  for(let k=0;k<26;k++){ x.fillStyle = `rgba(255,${210+k%3*15},150,${0.35 + (k%4)*0.12})`; x.beginPath(); x.arc(80 + k*72, H*0.47 + Math.sin(k*1.7)*18, 2.5, 0, 7); x.fill(); }
+  const field = x.createRadialGradient(W/2, H*1.05, 60, W/2, H*1.05, W*0.65); field.addColorStop(0,"#3FAE4A"); field.addColorStop(1,"#14581F");
+  x.fillStyle = field; x.beginPath(); x.ellipse(W/2, H*1.08, W*0.66, H*0.5, 0, Math.PI, 2*Math.PI); x.fill();
+  x.strokeStyle = "rgba(255,255,255,.55)"; x.lineWidth = 3; x.beginPath(); x.ellipse(W/2, H*1.08, W*0.6, H*0.44, 0, Math.PI, 2*Math.PI); x.stroke();
+
+  /* frame */
+  const PX = 250, PW = W - 2*PX, inner = 22;
+  const bodyH = 92 + 12 + 2*(80 + ROWS*ROW + 6) + 74;
+  const PY = Math.round((H - bodyH - 2*inner) / 2), PH = bodyH + 2*inner;
+  x.save(); x.shadowColor = "rgba(0,0,0,.55)"; x.shadowBlur = 40; x.shadowOffsetY = 12;
+  x.fillStyle = lin(PY, PY+PH, [[0,"#F7F7F7"],[0.5,"#9EA3A8"],[1,"#E9EBED"]]); rrect(PX, PY, PW, PH, 46); x.fill(); x.restore();
+  x.fillStyle = "#1B1F24"; rrect(PX+10, PY+10, PW-20, PH-20, 38); x.fill();
+  const IX = PX + inner, IW = PW - 2*inner; let y = PY + inner;
+
+  /* header */
+  x.fillStyle = lin(y, y+92, [[0,"#FFFFFF"],[0.55,"#E4E6E9"],[1,"#B9BEC4"]]); rrect(IX+24, y, IW-48, 92, [0,0,26,26]); x.fill();
+  text("MATCH SUMMARY", W/2, y+48, D("700",68), "#111111", "center");
+  y += 92 + 12;
+
+  const themes = [
+    {band:["#0A2E78","#1D63CF","#0A2E78"], rowA:"#14479E", rowB:"#1A55B8"},
+    {band:["#0B4A22","#2A8F45","#0B4A22"], rowA:"#17602D", rowB:"#1C6F35"}
+  ];
   [0,1].forEach(i=>{
-    const inn = S.innings[i], st = stats(inn);
-    box(40, y, W-80, 110, 18, "#1F6B45");
-    const sc = `${st.runs}/${st.wk}`, ov = `${oversTxt(st.legal)} ov`;
-    x.font = D("700",72); const scW = x.measureText(sc).width;
-    x.font = T("500",28); const ovW = x.measureText(ov).width;
-    x.font = D("700",52);
-    text(fit(S.teams[i].toUpperCase(), W-80-70-scW-ovW-60), 70, y+74, D("700",52), "#FFFFFF");
-    text(sc, W-70-ovW-20, y+82, D("700",72), "#FFFFFF", "right");
-    text(ov, W-70, y+80, T("500",28), "rgba(255,255,255,.82)", "right");
-    y += 110 + 12;
-    box(40, y, W-80, PANEL, 18, "#16301F");
+    const inn = S.innings[i], st = stats(inn), th = themes[i];
+    /* team band */
+    x.fillStyle = linX(IX, IX+IW, [[0,th.band[0]],[0.5,th.band[1]],[1,th.band[2]]]); x.fillRect(IX, y, IW, 80);
+    x.fillStyle = "rgba(255,255,255,.35)"; x.fillRect(IX, y, IW, 2);
+    const initials = S.teams[i].split(/\s+/).filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase() || "T";
+    x.fillStyle = "#FFFFFF"; x.beginPath(); x.arc(IX+52, y+40, 30, 0, 7); x.fill();
+    text(initials, IX+52, y+42, D("700",30), th.band[0], "center");
+    const score = `${st.runs}-${st.wk}`, ovl = `${oversWord(st.legal)} Over${st.legal===6?"":"s"}`;
+    x.font = D("700",64); const sW = x.measureText(score).width;
+    x.font = D("400",46); const oW = x.measureText(ovl).width;
+    text(score, IX+IW-30, y+43, D("700",64), "#FFFFFF", "right");
+    x.fillStyle = "#FFFFFF"; x.fillRect(IX+IW-30-sW-28, y+20, 6, 42);
+    text(ovl, IX+IW-30-sW-48, y+43, D("400",46), "#FFFFFF", "right");
+    text(S.teams[i].toUpperCase(), IX+100, y+43, D("700",64), "#FFFFFF", "left", IW-100-sW-oW-130);
+    y += 80;
+    /* rows */
+    const mid = IX + IW/2;
     if(full()){
-      const colW = (W-80-80)/2, L = 72, R = 72 + colW + 16, Lend = L + colW - 24, Rend = W - 72;
-      text("BATTING", L, y+48, T("700",22), "#9BE0B8"); text("BOWLING", R, y+48, T("700",22), "#9BE0B8");
-      const bat = battedList(inn).map(p=>({p, ...batFig(inn,p)})).sort((a,b)=>b.r-a.r || a.b-b.b).slice(0,3);
-      const bowl = bowledList(inn).map(p=>({p, ...bowlFig(inn,p)})).sort((a,b)=>b.w-a.w || a.r-b.r).slice(0,3);
-      bat.forEach((r,k)=>{
-        const yy = y + 104 + k*80, val = `${r.r}${r.out ? "" : "*"}`;
-        x.font = D("700",46); const vw = x.measureText(val).width;
-        x.font = T("600",32); text(fit(pname(i, r.p), colW-vw-50), L, yy, T("600",32), "#FFFFFF");
-        text(`${r.b} ball${r.b===1?"":"s"}`, L, yy+30, T("400",22), "rgba(244,247,241,.6)");
-        text(val, Lend, yy+8, D("700",46), "#FFFFFF", "right");
-      });
-      bowl.forEach((r,k)=>{
-        const yy = y + 104 + k*80, val = `${r.w}-${r.r}`;
-        x.font = D("700",46); const vw = x.measureText(val).width;
-        x.font = T("600",32); text(fit(pname(1-i, r.p), colW-vw-50), R, yy, T("600",32), "#FFFFFF");
-        text(`${oversTxt(r.legal)} over${r.legal===6?"":"s"}`, R, yy+30, T("400",22), "rgba(244,247,241,.6)");
-        text(val, Rend, yy+8, D("700",46), "#FFFFFF", "right");
-      });
-      if(!bat.length) text("No batting", L, y+110, T("400",28), "rgba(244,247,241,.6)");
-      if(!bowl.length) text("No bowling", R, y+110, T("400",28), "rgba(244,247,241,.6)");
+      const bat = topBat(inn, 4), bowl = topBowl(inn, 4);
+      for(let k=0;k<ROWS;k++){
+        const ry = y + k*ROW;
+        x.fillStyle = k%2 ? th.rowB : th.rowA; x.fillRect(IX, ry, IW, ROW-2);
+        const b = bat[k], w = bowl[k];
+        if(b){
+          text(pname(i,b.p).toUpperCase(), IX+28, ry+ROW/2, D("700",38), "#FFFFFF", "left", IW/2-260);
+          text(`${b.r}${b.out?"":"*"}`, mid-150, ry+ROW/2, D("700",38), "#FFFFFF", "center");
+          text(b.b, mid-55, ry+ROW/2, D("600",34), "rgba(255,255,255,.88)", "center");
+        }
+        if(w){
+          text(pname(1-i,w.p).toUpperCase(), mid+28, ry+ROW/2, D("700",38), "#FFFFFF", "left", IW/2-280);
+          text(`${w.w}-${w.r}`, IX+IW-170, ry+ROW/2, D("700",38), "#FFFFFF", "center");
+          text(oversTxt(w.legal), IX+IW-62, ry+ROW/2, D("600",34), "rgba(255,255,255,.88)", "center");
+        }
+      }
+      x.fillStyle = "rgba(255,255,255,.35)"; x.fillRect(mid-2, y, 4, ROWS*ROW-2);
     } else {
-      let fours = 0, sixes = 0;
-      inn.balls.forEach(b=>{ if(b.x!=="wd"){ if(b.r===4) fours++; if(b.r===6) sixes++; } });
-      const rr = st.legal ? (st.runs/(st.legal/6)).toFixed(2) : "0.00";
-      const tiles = [[fours,"FOURS"],[sixes,"SIXES"],[st.wd+st.nb,"EXTRAS"],[rr,"RUN RATE"]];
-      const tw = (W-80-60-3*20)/4;
-      tiles.forEach(([v,l],k)=>{
-        const cx = 70 + k*(tw+20) + tw/2;
-        text(String(v), cx, y+102, D("700",68), "#FFFFFF", "center");
-        text(l, cx, y+144, T("700",22), "#9BE0B8", "center");
+      const q = quickStats(inn);
+      x.fillStyle = th.rowA; x.fillRect(IX, y, IW, ROW-2);
+      const cells = [["FOURS", q.fours], ["SIXES", q.sixes], ["EXTRAS", q.st.wd+q.st.nb], ["RUN RATE", q.rr]];
+      const cw = IW/4;
+      cells.forEach(([l,v],k)=>{
+        const cx = IX + k*cw + cw/2;
+        text(l, cx, y+28, D("600",26), "rgba(255,255,255,.8)", "center");
+        text(String(v), cx, y+68, D("700",46), "#FFFFFF", "center");
+        if(k) { x.fillStyle = "rgba(255,255,255,.3)"; x.fillRect(IX + k*cw - 1, y+10, 2, ROW-22); }
       });
     }
-    y += PANEL + 34;
+    y += ROWS*ROW + 6;
   });
-  box(40, y, W-80, 112, 18, "#F2B451");
-  x.font = D("700",52); text(fit(resultTxt().toUpperCase(), W-140), W/2, y+74, D("700",52), "#2A1C00", "center");
-  y += 112 + 52;
-  if(S.toss){ x.font = T("400",26); text(fit(S.toss, W-420), 60, y, T("400",26), "rgba(244,247,241,.6)"); }
-  text("Gully Scorer", W-60, y, T("700",26), "rgba(155,224,184,.85)", "right");
+
+  /* result bar */
+  x.fillStyle = lin(y, y+74, [[0,"#FFFFFF"],[1,"#D5D9DE"]]); rrect(IX, y, IW, 74, [0,0,30,30]); x.fill();
+  text(resultTxt().toUpperCase(), W/2, y+39, D("700",52), "#111111", "center", IW-80);
+
+  /* footer */
+  if(S.toss) text(S.toss, PX+30, PY+PH+42, D("400",30), "rgba(255,255,255,.75)", "left", PW-360);
+  text("GULLY SCORER", PX+PW-30, PY+PH+42, D("700",30), "rgba(255,255,255,.85)", "right");
+
   c.toBlob(b=>{
     if(!b) return;
     sumBlob = b;
     if(sumUrl) URL.revokeObjectURL(sumUrl);
     sumUrl = URL.createObjectURL(b);
-    $("sumImg").src = sumUrl; $("sumImg").height = H; $("saveImg").href = sumUrl;
+    $("sumImg").src = sumUrl; $("saveImg").href = sumUrl;
   }, "image/png");
 }
 $("shareImg").onclick = async ()=>{
   if(!sumBlob) return;
-  const file = new File([sumBlob], "match-summary.png", {type:"image/png"});
-  if(navigator.canShare && navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file], title:"Match summary"}); }catch(e){}
+  const file = new File([sumBlob], "match-summary.png", {type:"image/png"}), text = scoreText();
+  const withText = {files:[file], text}, onlyFile = {files:[file]};
+  if(navigator.canShare && (navigator.canShare(withText) || navigator.canShare(onlyFile))){
+    try{ await navigator.share(navigator.canShare(withText) ? withText : onlyFile); }catch(e){}
   } else {
     $("saveImg").hidden = false;
     $("imgNote").textContent = "This browser can't share images directly. Tap Save image, or long-press the image, then send it on WhatsApp.";
