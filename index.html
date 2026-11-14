@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QAs1+8VapRP6DPzEOr3/4yVYYNgtDEZLFoxyadqDeqs=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ofQuxPVLZV9HKS+k+sPLreBI/n0oLXtqhtD7Hxlxy7Q=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -369,7 +369,10 @@ function inningsOver(i){
 }
 function resultTxt(){
   const t = target(), s2 = stats(S.innings[1]), A = S.teams[0], B = S.teams[1];
-  if(s2.runs >= t){ const left = wkts(1) - s2.wk; return `${B} won by ${left} wicket${left===1?"":"s"}`; }
+  if(s2.runs >= t){
+    const left = wkts(1) - s2.wk, balls = S.overs*6 - s2.legal;
+    return `${B} won by ${left} wicket${left===1?"":"s"}` + (balls > 0 ? ` (${balls} ball${balls===1?"":"s"} left)` : "");
+  }
   if(s2.runs === t-1) return "Match tied";
   const by = t-1-s2.runs; return `${A} won by ${by} run${by===1?"":"s"}`;
 }
@@ -526,7 +529,7 @@ function scoreText(){
     [0,1].forEach(i=>{
       const inn = S.innings[i]; if(!inn.balls.length) return;
       const st = stats(inn);
-      L.push("", `*${S.teams[i].toUpperCase()}  ${st.runs}-${st.wk}*  (${oversWord(st.legal)} ov)`);
+      L.push("", `*${S.teams[i].toUpperCase()}  ${st.runs}-${st.wk}*  (${oversWord(st.legal)}/${S.overs} ov)`);
       const t = ["```", padE("Batter",13) + padS("R",4) + padS("B",4)];
       const cut = (s,n)=> s.length > n ? s.slice(0, n-1) + "…" : s;
       topBat(inn,4).forEach(r=>t.push(padE(cut(pname(i,r.p),12) + (r.out?"":"*"),13) + padS(r.r,4) + padS(r.b,4)));
@@ -541,7 +544,7 @@ function scoreText(){
     L.push("", ["```",
       row("", S.teams[0].slice(0,7).toUpperCase(), S.teams[1].slice(0,7).toUpperCase()),
       row("Score", `${a.st.runs}-${a.st.wk}`, `${b.st.runs}-${b.st.wk}`),
-      row("Overs", oversTxt(a.st.legal), oversTxt(b.st.legal)),
+      row("Overs", `${oversWord(a.st.legal)}/${S.overs}`, `${oversWord(b.st.legal)}/${S.overs}`),
       row("4s / 6s", `${a.fours}/${a.sixes}`, `${b.fours}/${b.sixes}`),
       row("Extras", a.st.wd+a.st.nb, b.st.wd+b.st.nb),
       row("Run rate", a.rr, b.rr),
@@ -608,7 +611,7 @@ function drawSummary(){
     const initials = S.teams[i].split(/\s+/).filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase() || "T";
     x.fillStyle = "#FFFFFF"; x.beginPath(); x.arc(IX+52, y+40, 30, 0, 7); x.fill();
     text(initials, IX+52, y+42, D("700",30), th.band[0], "center");
-    const score = `${st.runs}-${st.wk}`, ovl = `${oversWord(st.legal)} Over${st.legal===6?"":"s"}`;
+    const score = `${st.runs}-${st.wk}`, ovl = `${oversWord(st.legal)}/${S.overs} Over${S.overs===1?"":"s"}`;
     x.font = D("700",64); const sW = x.measureText(score).width;
     x.font = D("400",46); const oW = x.measureText(ovl).width;
     text(score, IX+IW-30, y+43, D("700",64), "#FFFFFF", "right");
@@ -656,7 +659,7 @@ function drawSummary(){
   text(resultTxt().toUpperCase(), W/2, y+39, D("700",52), "#111111", "center", IW-80);
 
   /* footer */
-  if(S.toss) text(S.toss, PX+30, PY+PH+42, D("400",30), "rgba(255,255,255,.75)", "left", PW-360);
+  text(`${S.overs} OVER${S.overs===1?"":"S"} A SIDE` + (S.toss ? `  ·  ${S.toss}` : ""), PX+30, PY+PH+42, D("400",30), "rgba(255,255,255,.8)", "left", PW-360);
   text("GULLY SCORER", PX+PW-30, PY+PH+42, D("700",30), "rgba(255,255,255,.85)", "right");
 
   c.toBlob(b=>{
