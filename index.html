@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ofQuxPVLZV9HKS+k+sPLreBI/n0oLXtqhtD7Hxlxy7Q=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ftGoaNm7nJF6YZj425Zf4qoZeAxfI+AgrtojqZ6P+o4=' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
@@ -174,11 +174,11 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
         <label for="p2">Team B players<textarea id="p2" placeholder="One name per line"></textarea></label>
       </div>
       <label id="oneSideLab" for="oneSide" class="chk" hidden><input type="checkbox" id="oneSide"><span><b>One-side batting</b><br>One batter at a time, no non-striker. Every player bats, so the team is all out when all are out.</span></label>
-      <label id="lastManLab" for="lastMan" class="chk" hidden><input type="checkbox" id="lastMan"><span><b>Last man bats alone</b><br>Two batters as normal. When one batter is left, he keeps batting alone until he's out.</span></label>
+      <label id="lastManLab" for="lastMan" class="chk" hidden><input type="checkbox" id="lastMan"><span><b>Last man bats alone</b><br>Two batters as normal. When one batter is left, he keeps batting alone until he's out. Off: all out when one batter is left.</span></label>
       <p id="rosterNote" class="note" hidden>One name per line, 2 to 15 players. Leave a box empty to use Player 1, Player 2 and so on. All out when one batter is left.</p>
       <div class="row2">
         <label for="ov">Overs per side<input id="ov" type="number" inputmode="numeric" min="1" max="50" value="6"></label>
-        <label for="wk" id="wkLab">Wickets per side<input id="wk" type="number" inputmode="numeric" min="1" max="14" value="5"></label>
+        <label for="pa" id="paLab">Players a side<input id="pa" type="number" inputmode="numeric" min="2" max="15" value="6"></label>
       </div>
       <label for="wr" class="chk"><input type="checkbox" id="wr" checked><span><b>Wide gives 1 run</b><br>Turn off if a wide is only bowled again, with no run added.</span></label>
       <label for="simple" class="chk"><input type="checkbox" id="simple"><span><b>One-tap wide and wicket</b><br>Wide counts only the wide, with no extra runs. Wicket counts no runs. Both end the ball straight away.</span></label>
@@ -437,7 +437,7 @@ function clean(s){
   if(mode==="full" && (players[0].length<2 || players[1].length<2)) return null;
   const pos = o => o && typeof o==="object" ? {str:ix(o.str), non:ix(o.non), bw:ix(o.bw), prev:ix(o.prev)} : null;
   return {
-    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,24), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: mode==="full" && !s.oneSide && !!s.lastMan,
+    id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,24), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: !(mode==="full" && s.oneSide) && !!s.lastMan, size:n(s.size,15),
     teams:s.teams.map(t=>String(t).slice(0,20)),
     overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false, simple:!!s.simple, fh:s.fh!==false,
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
@@ -514,6 +514,11 @@ function render(){
 /* plain-text scorecard for WhatsApp: a monospace table that reads well on a phone */
 const padE = (s,n)=>{ s = String(s); return s.length > n ? s.slice(0, n-1) + "…" : s.padEnd(n); };
 const padS = (s,n)=>String(s).padStart(n);
+/* team size: from the player lists in Full mode, from "Players a side" in Quick mode */
+function sideTxt(){
+  if(full()){ const a = S.players[0].length, b = S.players[1].length; return a===b ? `${a}-a-side` : `${a} v ${b} players`; }
+  return S.size ? `${S.size}-a-side` : "";
+}
 const oversWord = l => { const t = oversTxt(l); return t.endsWith(".0") ? t.slice(0,-2) : t; };
 function topBat(inn, n){ return battedList(inn).map(p=>({p, ...batFig(inn,p)})).sort((a,b)=>b.r-a.r || a.b-b.b).slice(0,n); }
 function topBowl(inn, n){ return bowledList(inn).map(p=>({p, ...bowlFig(inn,p)})).sort((a,b)=>b.w-a.w || a.r-b.r).slice(0,n); }
@@ -523,7 +528,7 @@ function quickStats(inn){
   return {st, fours, sixes, rr: st.legal ? (st.runs/(st.legal/6)).toFixed(2) : "0.00"};
 }
 function scoreText(){
-  const L = ["*MATCH SUMMARY*", `${S.teams[0]} vs ${S.teams[1]} · ${S.overs} over${S.overs===1?"":"s"} a side`];
+  const L = ["*MATCH SUMMARY*", [`${S.teams[0]} vs ${S.teams[1]}`, sideTxt(), `${S.overs} over${S.overs===1?"":"s"}`].filter(Boolean).join(" · ")];
   if(S.toss) L.push(`_${S.toss}_`);
   if(full()){
     [0,1].forEach(i=>{
@@ -659,7 +664,7 @@ function drawSummary(){
   text(resultTxt().toUpperCase(), W/2, y+39, D("700",52), "#111111", "center", IW-80);
 
   /* footer */
-  text(`${S.overs} OVER${S.overs===1?"":"S"} A SIDE` + (S.toss ? `  ·  ${S.toss}` : ""), PX+30, PY+PH+42, D("400",30), "rgba(255,255,255,.8)", "left", PW-360);
+  text([sideTxt().toUpperCase(), `${S.overs} OVER${S.overs===1?"":"S"}`, S.toss].filter(Boolean).join("  ·  "), PX+30, PY+PH+44, D("600",34), "rgba(255,255,255,.92)", "left", PW-360);
   text("GULLY SCORER", PX+PW-30, PY+PH+42, D("700",30), "rgba(255,255,255,.85)", "right");
 
   c.toBlob(b=>{
@@ -857,7 +862,7 @@ $("chBowl").onclick = ()=>tossChoice(false);
 /* ---------- setup ---------- */
 function syncMode(){
   const f = $("mFull").checked;
-  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("oneSideLab").hidden = !f; $("lastManLab").hidden = !f || $("oneSide").checked; $("wkLab").hidden = f;
+  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("oneSideLab").hidden = !f; $("lastManLab").hidden = f && $("oneSide").checked; $("paLab").hidden = f;
   $("setupErr").textContent = "";
 }
 $("mQuick").addEventListener("change", syncMode); $("mFull").addEventListener("change", syncMode); $("oneSide").addEventListener("change", syncMode);
@@ -871,7 +876,7 @@ $("setupForm").addEventListener("submit", e=>{
   e.preventDefault();
   const fail = m => { $("setupErr").textContent = m; };
   const mode = $("mFull").checked ? "full" : "quick";
-  const t1=$("t1").value.trim(), t2=$("t2").value.trim(), ov=+$("ov").value, wk=+$("wk").value;
+  const t1=$("t1").value.trim(), t2=$("t2").value.trim(), ov=+$("ov").value, pa=+$("pa").value;
   if(!t1 || !t2) return fail("Enter both team names.");
   if(t1.toLowerCase()===t2.toLowerCase()) return fail("Team names must be different.");
   if(!(ov>=1 && ov<=50)) return fail("Overs must be between 1 and 50.");
@@ -884,20 +889,20 @@ $("setupForm").addEventListener("submit", e=>{
       if(list.length>15) return fail(`${tn} has more than 15 players.`);
       if(new Set(list.map(s=>s.toLowerCase())).size!==list.length) return fail(`${tn} has the same name twice. Make each name different.`);
     }
-  } else if(!(wk>=1 && wk<=14)) return fail("Wickets must be between 1 and 14.");
+  } else if(!(Number.isInteger(pa) && pa>=2 && pa<=15)) return fail("Players a side must be between 2 and 15.");
   const abc="abcdefghjkmnpqrstuvwxyz23456789", rnd=new Uint8Array(20); crypto.getRandomValues(rnd);
   let id=""; for(const v of rnd) id+=abc[v%abc.length];
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
   saveSettings();
-  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: mode==="full" && !$("oneSide").checked && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, fh: $("fh").checked, teams:[t1,t2], overs:ov, wickets:wk||1, cur:0, done:false, innings:[blank(), blank()]};
+  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: !(mode==="full" && $("oneSide").checked) && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, fh: $("fh").checked, teams:[t1,t2], overs:ov, size: mode==="full" ? 0 : pa, wickets: mode==="full" ? 1 : ($("lastMan").checked ? pa : pa-1), cur:0, done:false, innings:[blank(), blank()]};
   Promise.all([importKey(K), makeSigner()]).then(([k])=>{ cryptoKey = k; startScorer(true); })
     .catch(()=>fail("This browser can't start a secure match. Update the browser and try again."));
 });
-["t1","t2","ov","wk","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
+["t1","t2","ov","pa","p1","p2"].forEach(id=>$(id).addEventListener("input",()=>$("setupErr").textContent=""));
 
 /* ---------- remember last match settings (this phone only) ---------- */
-const SETKEY = "gullySettings", FIELDS = ["t1","t2","p1","p2","ov","wk"], CHECKS = ["oneSide","lastMan","wr","nr","simple","fh"];
+const SETKEY = "gullySettings", FIELDS = ["t1","t2","p1","p2","ov","pa"], CHECKS = ["oneSide","lastMan","wr","nr","simple","fh"];
 function saveSettings(){
   try{
     if(!$("remember").checked){ localStorage.removeItem(SETKEY); return; }
@@ -915,6 +920,7 @@ function loadSettings(){
   ["t1","t2"].forEach(id=>$(id).dispatchEvent(new Event("input")));
   syncMode(); $("savedNote").hidden = false;
 }
+syncMode();
 $("resetSet").onclick = ()=>{ try{ localStorage.removeItem(SETKEY); }catch(e){} location.reload(); };
 $("swapTeams").onclick = ()=>{
   [$("t1").value, $("t2").value] = [$("t2").value, $("t1").value];
@@ -925,7 +931,7 @@ $("swapTeams").onclick = ()=>{
 function keepSettingsFrom(m){
   try{
     const o = {mode:m.mode, t1:m.teams[0], t2:m.teams[1], p1:(m.players[0]||[]).join("\n"), p2:(m.players[1]||[]).join("\n"),
-      ov:String(m.overs), wk:String(m.wickets), oneSide:!!m.oneSide, lastMan:!!m.lastMan, wr:m.wr!==false, nr:m.nr!==false, simple:!!m.simple, fh:m.fh!==false};
+      ov:String(m.overs), pa:String(m.size || (m.mode==="full" ? 6 : (m.lastMan ? m.wickets : m.wickets+1))), oneSide:!!m.oneSide, lastMan:!!m.lastMan, wr:m.wr!==false, nr:m.nr!==false, simple:!!m.simple, fh:m.fh!==false};
     localStorage.setItem(SETKEY, JSON.stringify(o));
   }catch(e){}
 }
