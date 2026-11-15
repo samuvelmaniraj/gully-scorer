@@ -977,7 +977,14 @@ function copyText(text, btn, shown){
 $("copyBtn").onclick = ()=>copyText($("linkTxt").textContent, $("copyBtn"), $("linkTxt"));
 
 /* ---------- keep scorer screen on ---------- */
-async function keepAwake(){ try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
+let waking = false;
+async function keepAwake(){
+  if(waking || (wakeLock && !wakeLock.released) || !navigator.wakeLock) return;
+  waking = true;
+  try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} finally{ waking = false; }
+}
+// iPhone can refuse to turn keep-awake back on after a trip to the home screen; a tap always allows it, so retry on the next tap
+document.addEventListener("pointerdown",()=>{ if(S && !isViewer && document.visibilityState==="visible") keepAwake(); }, {passive:true});
 document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState!=="visible" || !S || isViewer) return;
   keepAwake();
