@@ -2,7 +2,7 @@
 
 Live scoring for gully and box cricket. One phone scores, everyone else watches live through a link or QR code. Free to run, no sign-up, privacy first.
 
-Last updated: 14 Nov 2026
+Last updated: 16 Nov 2026
 
 ## Links
 
@@ -29,7 +29,8 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
       └── page loaded from GitHub Pages         update, 12 hours)
 ```
 
-- **The page** is one HTML file (`index.html`) on GitHub Pages. It loads only itself and `qrcode.min.js` from the same site.
+- **The page** is one HTML file (`index.html`) on GitHub Pages. It loads only itself and `qrcode.min.js` from the same site, plus its app files (`manifest.webmanifest`, icons, `sw.js`).
+- **Install as an app:** `sw.js` is a service worker that keeps a copy of the site's own files on the phone. It tries the network first (waits up to 3.5 s), then uses the saved copy, so new versions show up on the next open when online. It never touches relay traffic or any other site.
 - **Each match** gets a random ID, a secret encryption key (AES-GCM) and a signing key pair (ECDSA P-256).
 - **Watch link:** `…/#watch-<id>.<key>.<publicKey>`. Anyone with it can read the score. Browsers never send the `#` part to any server, so the relay never sees the key.
 - **Handover link:** `…/#score-<id>.<key>.<publicKey>.<privateKey>`. Anyone with it can change the score; send it privately.
@@ -57,6 +58,8 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 
 **Convenience**
 - Remember last match settings on the phone (team names, players, overs, toggles); Clear and start fresh
+- Install as an app on the home screen: icon, full screen, opens on weak signal. Android shows an "Install app" button; iPhone shows how to add it from Share. "Not now" hides the hint on that phone.
+- Scorer's screen stays on during a match (screen wake lock)
 
 ## Main decisions and why
 
@@ -69,6 +72,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 | QR library copied into the repo, pinned with an integrity hash | Page runs only our own code; no outside script server |
 | Strict Content-Security-Policy in `index.html` | Blocks any script or connection not on the allow list |
 | Settings saved on the phone only | Convenience without storing anything online |
+| Network-first service worker, own files only | Opens at the ground on weak signal, updates still arrive straight away, relay traffic untouched |
 
 ## Accounts and secrets
 
@@ -82,6 +86,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 
 - **Edit the page:** change `src/gully-scorer.html`, then run `python3 tools/build.py` to make `index.html`. Commit both. Pages updates in about a minute.
   - The build is required: `index.html` pins the inline script by its hash, so an edited page without a rebuild won't run.
+  - Installed phones get the new version the next time the app is opened with signal (the service worker checks the network first).
 - **Edit the relay:** change `worker/relay.js` and push. GitHub Actions ("Deploy relay") deploys it, then checks send, latest, origin blocking and the live connection.
 - **Tests:** `node tests/relay.test.mjs` (relay logic) and `node tests/e2e.js` (three simulated phones, needs Playwright).
 - **Format changes:** if the link or message format changes, old match links stop working. Tell users to start a new match after updates.
@@ -96,10 +101,11 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 ## Roadmap
 
 **Planned next (ideas already in the plan)**
-1. Install as an app on the home screen (icon, full screen)
-2. Ball-by-ball commentary for viewers
-3. Player stats across matches (stored on the phone only, or on the relay, to decide)
-4. Points table for a series or tournament (wins, losses, net run rate)
+1. Ball-by-ball commentary for viewers
+2. Player stats across matches (stored on the phone only, or on the relay, to decide)
+3. Points table for a series or tournament (wins, losses, net run rate)
+
+**Done:** Install as an app on the home screen (16 Nov 2026)
 
 **Optional, later**
 - Custom domain (about US$10 a year)
@@ -111,8 +117,12 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 index.html               built page that GitHub Pages serves (don't edit by hand)
 qrcode.min.js            QR code library (qrcodejs 1.0.0, MIT), pinned by hash
 qrcode.LICENSE.txt
+manifest.webmanifest     app name, colours and icons for installing
+sw.js                    service worker: keeps the app's own files on the phone
+icon-*.png, apple-touch-icon.png   home-screen icons
 src/gully-scorer.html    page source: edit this
 tools/build.py           builds index.html with its security rules
+tools/make_icons.py      draws the icons (needs Pillow)
 worker/relay.js          Cloudflare relay
 worker/wrangler.toml     relay config
 .github/workflows/deploy-relay.yml   deploys and checks the relay

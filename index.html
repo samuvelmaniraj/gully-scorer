@@ -4,8 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ftGoaNm7nJF6YZj425Zf4qoZeAxfI+AgrtojqZ6P+o4=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob:; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ievIjd0y4zi0K9SMEX1pIGXH4unSOvvj+fv0FlTw3Tc=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Gully Scorer">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F3F5F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1612" media="(prefers-color-scheme: dark)">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 <title>Gully Scorer</title>
 <style>
@@ -142,6 +151,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
   </header>
 
   <section id="setup" class="card">
+    <p id="installNote" class="note banner" hidden><span id="installTxt">Add Gully Scorer to your home screen to start a match in one tap.</span> <button type="button" class="linkbtn" id="installBtn" hidden>Install app</button> <button type="button" class="linkbtn" id="installHide" style="margin-left:8px">Not now</button></p>
     <h2>New match</h2>
     <form id="setupForm" style="display:flex;flex-direction:column;gap:12px">
       <p id="savedNote" class="note banner" hidden>Filled in from your last match. <button type="button" class="linkbtn" id="resetSet">Clear and start fresh</button></p>
@@ -1119,6 +1129,27 @@ async function startViewer(id, k, x, y){
     poll(); if(!ws || ws.readyState > 1) open();
   });
 }
+
+/* ---------- install as an app ---------- */
+// The service worker keeps a copy of this site's own files on the phone; it never touches relay traffic.
+if("serviceWorker" in navigator && location.protocol==="https:"){
+  addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js", {scope:"./"}).catch(()=>{}); });
+}
+(function installHint(){
+  const HIDE = "gully-install-hide";
+  const installed = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  let hidden = false; try{ hidden = localStorage.getItem(HIDE)==="1"; }catch(e){}
+  if(installed || hidden) return;
+  const note = $("installNote"), show = ()=>{ if(!$("setup").hidden) note.hidden = false; };
+  let prompt = null;
+  addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); prompt = e; $("installBtn").hidden = false; show(); });
+  addEventListener("appinstalled", ()=>{ note.hidden = true; });
+  $("installBtn").onclick = async ()=>{ if(!prompt) return; prompt.prompt(); const r = await prompt.userChoice.catch(()=>null); prompt = null; if(r && r.outcome==="accepted") note.hidden = true; };
+  $("installHide").onclick = ()=>{ note.hidden = true; try{ localStorage.setItem(HIDE, "1"); }catch(e){} };
+  // iPhone and iPad have no install button: Safari's Share menu does it
+  const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints > 1);
+  if(iOS){ $("installTxt").textContent = "Add to your home screen: tap Share, then Add to Home Screen."; show(); }
+})();
 
 /* ---------- boot ---------- */
 (async function boot(){

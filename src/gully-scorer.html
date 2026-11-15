@@ -131,6 +131,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
   </header>
 
   <section id="setup" class="card">
+    <p id="installNote" class="note banner" hidden><span id="installTxt">Add Gully Scorer to your home screen to start a match in one tap.</span> <button type="button" class="linkbtn" id="installBtn" hidden>Install app</button> <button type="button" class="linkbtn" id="installHide" style="margin-left:8px">Not now</button></p>
     <h2>New match</h2>
     <form id="setupForm" style="display:flex;flex-direction:column;gap:12px">
       <p id="savedNote" class="note banner" hidden>Filled in from your last match. <button type="button" class="linkbtn" id="resetSet">Clear and start fresh</button></p>
@@ -1108,6 +1109,27 @@ async function startViewer(id, k, x, y){
     poll(); if(!ws || ws.readyState > 1) open();
   });
 }
+
+/* ---------- install as an app ---------- */
+// The service worker keeps a copy of this site's own files on the phone; it never touches relay traffic.
+if("serviceWorker" in navigator && location.protocol==="https:"){
+  addEventListener("load", ()=>{ navigator.serviceWorker.register("sw.js", {scope:"./"}).catch(()=>{}); });
+}
+(function installHint(){
+  const HIDE = "gully-install-hide";
+  const installed = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  let hidden = false; try{ hidden = localStorage.getItem(HIDE)==="1"; }catch(e){}
+  if(installed || hidden) return;
+  const note = $("installNote"), show = ()=>{ if(!$("setup").hidden) note.hidden = false; };
+  let prompt = null;
+  addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); prompt = e; $("installBtn").hidden = false; show(); });
+  addEventListener("appinstalled", ()=>{ note.hidden = true; });
+  $("installBtn").onclick = async ()=>{ if(!prompt) return; prompt.prompt(); const r = await prompt.userChoice.catch(()=>null); prompt = null; if(r && r.outcome==="accepted") note.hidden = true; };
+  $("installHide").onclick = ()=>{ note.hidden = true; try{ localStorage.setItem(HIDE, "1"); }catch(e){} };
+  // iPhone and iPad have no install button: Safari's Share menu does it
+  const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints > 1);
+  if(iOS){ $("installTxt").textContent = "Add to your home screen: tap Share, then Add to Home Screen."; show(); }
+})();
 
 /* ---------- boot ---------- */
 (async function boot(){

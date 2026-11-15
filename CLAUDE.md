@@ -6,7 +6,8 @@ Full background, decisions and roadmap: `docs/PROJECT_NOTES.md`. Read it before 
 - Privacy first: never add analytics, outside scripts, fonts or servers. Scores stay end-to-end encrypted and signed.
 - Edit `src/gully-scorer.html`, never `index.html` by hand. Then run `python3 tools/build.py` and commit both.
   `index.html` pins the inline script's SHA-256 in its Content-Security-Policy; skipping the build breaks the live site.
-- The page may load only itself and `qrcode.min.js` (pinned with an integrity hash), and connect only to the relay in `OWN_RELAY`.
+- The page may load only itself and `qrcode.min.js` (pinned with an integrity hash), and connect only to the relay in `OWN_RELAY`. App files (`manifest.webmanifest`, icons, `sw.js`) are allowed by name in the CSP in `tools/build.py`.
+- `sw.js` must only handle this site's own files. If you add a file it should save, add it to `FILES` and bump `CACHE`.
 - Changing the link format (`#watch-…`, `#score-…`) or the message format (`g2.` + signature + ciphertext) breaks existing match links. Call it out to the user.
 - Keep the scorer UI fast and one-handed: big buttons, few taps.
 

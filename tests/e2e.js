@@ -15,7 +15,8 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
       const req = route.request(), u = new URL(req.url());
       if (u.host === "samuvelmaniraj.github.io") {
         const f = u.pathname.endsWith("/") ? "index.html" : u.pathname.split("/").pop();
-        return route.fulfill({ status: 200, contentType: f.endsWith(".js") ? "application/javascript" : "text/html", body: fs.readFileSync(path.join(ROOT, f)) });
+        const type = { js: "application/javascript", png: "image/png", webmanifest: "application/manifest+json" }[f.split(".").pop()] || "text/html";
+        return route.fulfill({ status: 200, contentType: type, body: fs.readFileSync(path.join(ROOT, f)) });
       }
       if (u.host.endsWith("workers.dev")) {
         const [, , topic, kind] = u.pathname.split("/"), cors = { "Access-Control-Allow-Origin": "*" };
@@ -30,7 +31,8 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
       ws.onMessage(m => { if (m === "ping") ws.send("pong"); });
       ws.onClose(() => sockets.splice(sockets.indexOf(s), 1));
     });
-    const p = await ctx.newPage(); p.on("pageerror", e => errors.push(e.message)); return p;
+    const p = await ctx.newPage(); p.on("pageerror", e => errors.push(e.message));
+    p.on("console", m => { if (/Content Security Policy|Refused to/i.test(m.text())) errors.push("CSP: " + m.text()); }); return p;
   };
   const tap = async (p, s) => { await p.click(s); await p.waitForTimeout(60); };
   const score = async p => (await p.textContent("#board")).match(/(\d+)\/(\d+)/)?.[0];
@@ -75,6 +77,13 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   await B.waitForTimeout(1200);
   check("match summary image is made", await B.evaluate(() => !!sumBlob && sumBlob.size > 10000));
   check("summary text has the result", (await B.evaluate(() => scoreText())).includes(await B.evaluate(() => resultTxt().toUpperCase())));
+  // Install as an app: manifest, icons and offline copy all load under the security rules
+  const C = await phone(); await C.goto(SITE); await C.waitForTimeout(1500);
+  const am = await (await C.context().newCDPSession(C)).send("Page.getAppManifest");
+  const m = (() => { try { return JSON.parse(am.data); } catch (e) { return null; } })();
+  check("app manifest loads", !!m && !am.errors.length && m.display === "standalone" && m.icons.length === 3, am.errors.map(e => e.message).join("; "));
+  check("offline helper is running", await C.evaluate(async () => { const r = await navigator.serviceWorker.ready; return !!r.active; }));
+  check("app files saved on the phone", await C.evaluate(async () => { const c = await caches.open("gully-v1"); return (await c.keys()).length >= 7; }));
   check("no page errors", errors.length === 0, errors.join("; "));
   await browser.close();
   console.log(failed ? `\n${failed} failed` : "\nall passed"); process.exit(failed ? 1 : 0);
