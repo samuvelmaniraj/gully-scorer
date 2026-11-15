@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-LXhPSbxfCSEHvcTX3d98z4Gcj/vT+1qvGulOlLEyZmU=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-z2HKVTQo82fgNDImXP3Mc2Z2lXPQTAKuLseu9bPz2aY=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -130,6 +130,21 @@ td .how{display:block;font-size:12px;color:var(--muted)}
 .link code{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);user-select:all}
 .note{font-size:13px;color:var(--muted);margin:0}
 .banner{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--turf-soft);color:var(--turf)}
+.comm{gap:10px}
+.commHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.seg2{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.seg2 button{background:none;color:var(--muted);font-size:13px;font-weight:600;padding:6px 12px;border-radius:0}
+.seg2 button[aria-pressed="true"]{background:var(--turf);color:#fff}
+.cov{display:flex;flex-direction:column;gap:2px}
+.cov+.cov{border-top:1px solid var(--line);padding-top:10px}
+.covSum{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.covSum span{font-weight:400;text-transform:none;letter-spacing:0}
+.cl{display:grid;grid-template-columns:40px 1fr;gap:8px;padding:3px 0;line-height:1.4}
+.cl .n{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;padding-top:1px}
+.cl.four .t b,.cl.six .t b{color:var(--turf)}
+.cl.w .t b{color:var(--ball)}
+.cl.ms{color:var(--amber);font-weight:600}
+.cTop{font-weight:600;padding:8px 10px;border-radius:10px;background:var(--turf-soft);color:var(--turf)}
 .install{display:flex;flex-direction:column;gap:6px}
 .install p{margin:0}
 .install ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
@@ -298,6 +313,12 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
 
   <section id="viewerNote" hidden>
     <div class="banner" id="viewerMsg">Connecting to the scorer…</div>
+  </section>
+
+  <section id="commCard" class="card comm" hidden aria-live="polite">
+    <div class="commHead"><h2>Commentary</h2><div class="seg2" id="commInn" hidden></div></div>
+    <div id="commList"></div>
+    <button type="button" class="btn ghost small" id="commMore" hidden>Show all overs</button>
   </section>
 </div>
 
@@ -506,6 +527,7 @@ function render(){
   if(isViewer && S.u) html += `<div class="prev">Last updated ${new Date(S.u).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</div>`;
   $("board").innerHTML = html;
   renderCard();
+  renderComm();
   $("finalCard").hidden = !S.done;
   if(S.done){ const t = scoreText(); $("cardTxt").textContent = t; $("waCard").href = "https://wa.me/?text=" + encodeURIComponent(t); if(sumFor !== S.v){ sumFor = S.v; drawSummary(); } }
 
@@ -580,6 +602,82 @@ function scoreText(){
   return L.join("\n");
 }
 $("copyCard").onclick = ()=>copyText(scoreText(), $("copyCard"), $("cardTxt"));
+
+/* ---------- ball-by-ball commentary (viewers): rebuilt from the balls, so nothing extra is sent ---------- */
+const plural = (n, w) => `${n} ${w}${n===1?"":"s"}`;
+function commOvers(i){
+  const inn = S.innings[i], F = full(), overs = [], bat = {}, t = i===1 ? target() : null;
+  const pick = (k, a) => a[k % a.length];
+  let runs = 0, wk = 0, legal = 0, fh = false, cur = null;
+  inn.balls.forEach((b, k)=>{
+    const ov = Math.floor(legal/6);
+    if(!cur || cur.no !== ov){ cur = {no:ov, items:[], runs:0, wk:0, bw:null}; overs.push(cur); }
+    const free = fh, tot = b.r + pen(b), before = runs;
+    if(S.fh!==false){ if(b.x==="nb") fh = true; else if(b.x!=="wd") fh = false; }
+    runs += tot; cur.runs += tot; if(b.w){ wk++; cur.wk++; } if(!b.x) legal++;
+    if(b.bw!=null) cur.bw = b.bw;
+    const num = `${ov}.${legal - ov*6 + (b.x ? 1 : 0)}`;
+    const who = F && b.bw!=null && b.s!=null ? `${esc(pname(1-i,b.bw))} to ${esc(pname(i,b.s))}, ` : "";
+    const p = [];
+    if(b.x==="wd") p.push(pen(b) ? (b.r ? `wide, ${plural(b.r,"more run")} taken` : "wide") : (b.r ? `wide, bowled again, ${plural(b.r,"run")} taken` : "wide, bowled again"));
+    if(b.x==="nb") p.push(b.r===4 ? "no-ball, and <b>FOUR</b> off the bat" : b.r===6 ? "no-ball, and <b>SIX</b> off the bat" : b.r ? `no-ball, ${plural(b.r,"run")} off the bat` : "no-ball");
+    let cls = b.x ? "x" : "";
+    if(b.w){
+      cls = "w";
+      const ran = b.r ? ` after ${plural(b.r,"run")}` : "";
+      if(F && b.out!=null){ const f = batFig(inn, b.out), nm = esc(pname(i, b.out));
+        p.push(b.wt==="r" ? `<b>RUN OUT!</b> ${nm} ${f.r} (${f.b})${ran}` : `<b>OUT!</b> ${nm} ${f.r} (${f.b})`); }
+      else p.push((b.wt==="r" || (b.r && !F)) ? `<b>RUN OUT!</b>${ran}` : "<b>WICKET!</b>");
+    } else if(!b.x){
+      if(b.r===4){ cls = "four"; p.push(pick(k, ["<b>FOUR!</b> Races away to the boundary","<b>FOUR!</b> Cracking shot","<b>FOUR!</b> Finds the gap"])); }
+      else if(b.r===6){ cls = "six"; p.push(pick(k, ["<b>SIX!</b> Huge hit","<b>SIX!</b> That's gone a long way","<b>SIX!</b> Right over the top"])); }
+      else if(b.r===0) p.push(pick(k, ["no run","dot ball","no run, well bowled"]));
+      else p.push(plural(b.r,"run"));
+    }
+    let txt = who + p.join(", ");
+    txt = txt.charAt(0).toUpperCase() + txt.slice(1);
+    if(free) txt = "Free hit: " + txt;
+    if(b.x==="nb" && S.fh!==false) txt += ". Free hit next ball.";
+    cur.items.push({num, txt, cls});
+    /* milestones: batter 25s and team 50s */
+    if(F && b.s!=null && b.x!=="wd"){
+      const was = bat[b.s]||0; bat[b.s] = was + b.r;
+      const m = [25,50,75,100].find(v=>was < v && bat[b.s] >= v);
+      if(m) cur.items.push({num:"", txt:`${m===50||m===100 ? (m===50?"FIFTY":"HUNDRED")+" for "+esc(pname(i,b.s))+"!" : m+" up for "+esc(pname(i,b.s))}`, cls:"ms"});
+    }
+    if(Math.floor(runs/50) > Math.floor(before/50)) cur.items.push({num:"", txt:`${esc(S.teams[i])} ${Math.floor(runs/50)*50} up`, cls:"ms"});
+    if(!b.x && legal%6===0){
+      let s = `${plural(cur.runs,"run")}${cur.wk ? ", "+plural(cur.wk,"wicket") : ""} · ${esc(S.teams[i])} ${runs}/${wk}`;
+      if(F && cur.bw!=null){ const f = bowlFig(inn, cur.bw); s += ` · ${esc(pname(1-i,cur.bw))} ${f.w}/${f.r} (${oversWord(f.legal)} ov)`; }
+      if(t && runs < t && legal < S.overs*6) s += ` · need ${t-runs} from ${plural(S.overs*6-legal,"ball")}`;
+      cur.end = s;
+    }
+  });
+  return overs;
+}
+let commSel = null, commAll = false;
+function renderComm(){
+  const card = $("commCard");
+  if(!isViewer || !S || !S.innings[0].balls.length){ card.hidden = true; return; }
+  card.hidden = false;
+  const i = commSel!=null && (commSel===0 || S.cur===1) ? commSel : S.cur;
+  const tabs = $("commInn");
+  tabs.hidden = S.cur!==1;
+  if(S.cur===1) tabs.innerHTML = [0,1].map(k=>`<button type="button" data-inn="${k}" aria-pressed="${k===i}">${esc(S.teams[k].slice(0,10))}</button>`).join("");
+  const overs = commOvers(i).reverse(), inn = S.innings[i], st = stats(inn);
+  let html = "";
+  if(i===1 && S.done) html += `<div class="cTop">${esc(resultTxt())}</div>`;
+  else if(inn.done) html += `<div class="cTop">Innings over: ${esc(S.teams[i])} ${st.runs}/${st.wk} (${oversTxt(st.legal)} ov)</div>`;
+  const show = commAll ? overs : overs.slice(0, 3);
+  html += show.map(o=>`<div class="cov"><div class="covSum">${o.end ? `End of over ${o.no+1} <span>· ${o.end}</span>` : `Over ${o.no+1}`}</div>` +
+    o.items.slice().reverse().map(c=>`<div class="cl ${c.cls}"><span class="n">${c.num}</span><span class="t">${c.txt}</span></div>`).join("") + `</div>`).join("");
+  if(!overs.length) html += `<p class="note">No balls bowled yet in this innings.</p>`;
+  $("commList").innerHTML = html;
+  $("commMore").hidden = overs.length <= 3;
+  $("commMore").textContent = commAll ? "Show last 3 overs" : `Show all ${overs.length} overs`;
+}
+$("commInn").addEventListener("click", e=>{ const b = e.target.closest("button[data-inn]"); if(!b) return; commSel = +b.dataset.inn; commAll = false; renderComm(); });
+$("commMore").onclick = ()=>{ commAll = !commAll; renderComm(); };
 
 /* ---------- match summary image (broadcast-style) ---------- */
 let sumBlob = null, sumFor = -1, sumUrl = null;

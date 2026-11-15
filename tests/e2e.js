@@ -51,6 +51,9 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   // Viewer
   const V = await phone(); await V.goto(await A.textContent("#linkTxt")); await V.waitForTimeout(1000);
   check("viewer sees the live score", (await score(V)) === (await score(A)), await score(V));
+  const comm = await V.textContent("#commList").catch(() => "");
+  check("viewer sees ball-by-ball commentary", /FOUR!/.test(comm) && /no-ball/i.test(comm) && /Free hit/.test(comm) && /Sam|Raj|Ali/.test(comm), comm.slice(0, 80));
+  check("scorer's screen has no commentary", await A.isHidden("#commCard"));
 
   // Handover
   const B = await phone(); await B.goto(await A.textContent("#handTxt")); await B.waitForTimeout(1500);
@@ -75,6 +78,8 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
     await tap(B, `[data-r="${["1", "6", "0", "4"][k % 4]}"]`);
   }
   await B.waitForTimeout(1200);
+  check("commentary shows the result", (await V.textContent("#commList")).includes(await B.evaluate(() => resultTxt())));
+  if (process.env.SHOT) { await V.waitForTimeout(500); await V.setViewportSize({ width: 390, height: 2200 }); await V.locator("#commCard").screenshot({ path: process.env.SHOT }); }
   check("match summary image is made", await B.evaluate(() => !!sumBlob && sumBlob.size > 10000));
   check("summary text has the result", (await B.evaluate(() => scoreText())).includes(await B.evaluate(() => resultTxt().toUpperCase())));
   // Install as an app: manifest, icons and offline copy all load under the security rules

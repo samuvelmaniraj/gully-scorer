@@ -53,6 +53,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Watch link, QR code, WhatsApp button
 - Scorer handover by QR, link or WhatsApp; it also passes the match settings
 - Viewers keep the last score if the scorer goes away, and catch up when it's back
+- Ball-by-ball commentary for viewers (both modes): latest first, grouped by over with an end-of-over summary (runs, score, bowler in Full, runs needed in a chase), free hits, milestones (batter 25/50, team 50s), innings and result lines, switch between innings, last 3 overs with "Show all". Built from the balls already in each update, so no format change. Not shown on the scorer's phone.
 - Match end: TV-style summary image (1920×1080) with team bars, top 4 batters and bowlers (Full) or fours/sixes/extras/run rate (Quick), overs played / overs a side, team size, toss and result
 - WhatsApp text table sent with the image; Send as text and Copy text
 
@@ -101,11 +102,10 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 ## Roadmap
 
 **Planned next (ideas already in the plan)**
-1. Ball-by-ball commentary for viewers
-2. Player stats across matches (stored on the phone only, or on the relay, to decide)
-3. Points table for a series or tournament (wins, losses, net run rate)
+1. Player stats across matches (stored on the phone only, or on the relay, to decide)
+2. Points table for a series or tournament (wins, losses, net run rate)
 
-**Done:** Install as an app on the home screen (16 Nov 2026)
+**Done:** Install as an app on the home screen; ball-by-ball commentary (16 Nov 2026)
 
 **Optional, later**
 - Custom domain (about US$10 a year)
