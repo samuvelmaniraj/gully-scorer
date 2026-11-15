@@ -58,7 +58,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 
 **Convenience**
 - Remember last match settings on the phone (team names, players, overs, toggles); Clear and start fresh
-- Install as an app on the home screen: icon, full screen, opens on weak signal. Android shows an "Install app" button; iPhone shows how to add it from Share. "Not now" hides the hint on that phone.
+- Install as an app on the home screen: icon, full screen, opens on weak signal. Android shows an "Install app" button (one tap, then confirm). iPhone can't do one-tap installs (Apple doesn't allow it), so it shows step-by-step instructions with icons for Safari or Chrome. Android falls back to menu steps if Chrome doesn't offer its install box. "Not now" hides the hint on that phone.
 - Scorer's screen stays on during a match (screen wake lock)
 
 ## Main decisions and why
