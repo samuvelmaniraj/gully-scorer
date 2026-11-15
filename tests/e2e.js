@@ -54,6 +54,19 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   const comm = await V.textContent("#commList").catch(() => "");
   check("viewer sees ball-by-ball commentary", /FOUR!/.test(comm) && /no-ball/i.test(comm) && /Free hit/.test(comm) && /Sam|Raj|Ali/.test(comm), comm.slice(0, 80));
   check("scorer's screen has no commentary", await A.isHidden("#commCard"));
+  check("every ball has its time", await A.evaluate(() => S.t0 > 0 && S.innings[0].balls.every(b => Number.isInteger(b.t) && b.t >= 0)));
+  check("viewer receives ball times", await V.evaluate(() => S.t0 > 0 && S.innings[0].balls.every(b => Number.isInteger(b.t))));
+  // worst case: a 12-over Full match, 7 a side, every ball timed, must fit the relay's 16 KB limit
+  const sizes = await A.evaluate(async () => {
+    const one = k => ({ r: [0,1,4,6,2,1][k % 6], x: k % 9 === 0 ? "wd" : null, w: k % 13 === 0, s: k % 7, bw: k % 6, out: k % 13 === 0 ? k % 7 : null, wt: k % 13 === 0 ? "b" : null, pre: { str: k % 7, non: (k + 1) % 7, bw: k % 6, prev: (k + 1) % 6 }, t: 40 + k * 31 });
+    const big = JSON.parse(JSON.stringify(S)); big.overs = 12; big.players = [["Sam","Raj","Ali","Kumar","Vijay","Arun","Mani"],["Ben","Dev","Hari","Siva","Prem","Ravi","John"]];
+    big.innings = [0, 1].map(i => ({ done: i === 0, str: 1, non: 2, bw: 3, prev: 4, balls: Array.from({ length: 90 }, (_, k) => one(k + i * 90)) }));
+    const withT = (await seal({ t: "state", s: clean(big), sid: SID })).length;
+    big.innings.forEach(n => n.balls.forEach(b => delete b.t));
+    const noT = (await seal({ t: "state", s: clean(big), sid: SID })).length;
+    return { withT, noT };
+  });
+  check("biggest update still fits the relay", sizes.withT < 12000, `${sizes.noT} → ${sizes.withT} chars, limit 16384`);
 
   // Handover
   const B = await phone(); await B.goto(await A.textContent("#handTxt")); await B.waitForTimeout(1500);

@@ -37,6 +37,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - **Every update is signed.** Viewers ignore anything not signed by the scorer, so a watch link can't be used to fake a score.
 - **The relay** (`worker/relay.js`, a Cloudflare Worker with a Durable Object) keeps only the latest message per match. It pushes updates live over a WebSocket and deletes the match 12 hours after its last update. It only accepts requests from the Gully Scorer site, refuses anything that isn't a score message, and limits sending speed.
 - **Ordering:** each update carries a version number (`v`) that counts up, so phone clocks don't matter.
+- **Ball times:** each match stores its start time (`t0`) and each ball stores `t`, the seconds since the start (set when the ball is tapped). Kept small on purpose: a full 12-over match still uses well under the relay's 16 KB limit. Groundwork for video highlights (cut clips around 4s, 6s and wickets). Older balls without `t` still work. After a handover the new phone's clock is used, so a few seconds of drift is possible.
 - **Handover:** the new phone loads the latest state, then scores with a higher version. The old phone sees a newer version from another device and switches to watching.
 
 ## Features (all done)
@@ -114,6 +115,8 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 2. Maybe later: shared stats for the whole group through the relay (encrypted, group link) if backup and merge isn't enough
 
 **Done:** Install as an app on the home screen; ball-by-ball commentary; player stats on the phone with backup and merge (16 Nov 2026)
+
+**Future (big project):** camera with scorecard overlay, YouTube live, and automatic highlight clips from ball times. Step 1 done: every ball is timed (16 Nov 2026). Next steps when ready: scoreboard overlay link for streaming apps, then an Android app.
 
 **Optional, later**
 - Custom domain (about US$10 a year)

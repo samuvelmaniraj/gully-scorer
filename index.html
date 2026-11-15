@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aAP8DYJyHdEqa7uspulzaBNYCaz4YSdrciVFmxykvVU=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XwUH125+0DPabyENhBxJG+QLcW5YFnHr7/bBDG1mgrs=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -519,11 +519,12 @@ function clean(s){
   return {
     id:String(s.id||"").replace(/[^a-z0-9]/g,"").slice(0,24), mode, players, toss:String(s.toss||"").slice(0,80), oneSide: mode==="full" && !!s.oneSide, lastMan: !(mode==="full" && s.oneSide) && !!s.lastMan, size:n(s.size,15),
     teams:s.teams.map(t=>String(t).slice(0,20)),
-    overs:n(s.overs,50)||1, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false, simple:!!s.simple, fh:s.fh!==false,
+    overs:n(s.overs,50)||1, t0:n(s.t0,9e15)||undefined, wickets:n(s.wickets,14)||1, cur:s.cur===1?1:0, done:!!s.done, u:n(s.u,9e15), v:n(s.v,1e9), wr:s.wr!==false, nr:s.nr!==false, simple:!!s.simple, fh:s.fh!==false,
     innings:s.innings.map(inn=>({ done:!!(inn&&inn.done), ...(pos(inn)||{str:null,non:null,bw:null,prev:null}),
       balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({
         r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w),
-        s:ix(b&&b.s), bw:ix(b&&b.bw), out:ix(b&&b.out), wt:b&&b.wt==="r"?"r":b&&b.wt==="b"?"b":null, pre:pos(b&&b.pre) })) }))
+        s:ix(b&&b.s), bw:ix(b&&b.bw), out:ix(b&&b.out), wt:b&&b.wt==="r"?"r":b&&b.wt==="b"?"b":null, pre:pos(b&&b.pre),
+        t:b && Number.isInteger(b.t) && b.t>=0 && b.t<=86400 ? b.t : undefined })) }))
   };
 }
 
@@ -1069,6 +1070,8 @@ function confirmPick(){
 /* ---------- scorer actions ---------- */
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify({at:Date.now(), S, k:K, sk:SK, sid:SID})); }catch(e){} }
 function commit(){ S.u = Date.now(); S.v = (S.v||0) + 1; save(); render(); broadcast(); }
+/* when each ball happened: seconds since the match started (for highlights later) */
+function ballTime(){ if(!S.t0) S.t0 = Date.now(); return Math.max(0, Math.min(86400, Math.round((Date.now()-S.t0)/1000))); }
 function push(ball){
   const inn = S.innings[S.cur];
   if(full()){ ball.pre = {str:inn.str, non:inn.non, bw:inn.bw, prev:inn.prev}; ball.s = inn.str; ball.bw = inn.bw; }
@@ -1079,7 +1082,7 @@ function push(ball){
 }
 function addBall(r){
   const inn = S.innings[S.cur]; if(S.done || inn.done || need(S.cur)) return;
-  const ball = {r, x:pending, w:pw};
+  const ball = {r, x:pending, w:pw, t:ballTime()};
   if(pw && full()){ held = ball; render(); return; }
   if(pw && freeHitNext(inn)) ball.wt = "r";
   push(ball);
@@ -1192,7 +1195,7 @@ $("setupForm").addEventListener("submit", e=>{
   const blank = () => ({balls:[], done:false, str:null, non:null, bw:null, prev:null});
   K = b64e(crypto.getRandomValues(new Uint8Array(16)));
   saveSettings();
-  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: !(mode==="full" && $("oneSide").checked) && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, fh: $("fh").checked, teams:[t1,t2], overs:ov, size: mode==="full" ? 0 : pa, wickets: mode==="full" ? 1 : ($("lastMan").checked ? pa : pa-1), cur:0, done:false, innings:[blank(), blank()]};
+  S = {id, mode, players, toss: tossText, oneSide: mode==="full" && $("oneSide").checked, lastMan: !(mode==="full" && $("oneSide").checked) && $("lastMan").checked, wr: $("wr").checked, nr: $("nr").checked, simple: $("simple").checked, fh: $("fh").checked, teams:[t1,t2], overs:ov, size: mode==="full" ? 0 : pa, wickets: mode==="full" ? 1 : ($("lastMan").checked ? pa : pa-1), cur:0, done:false, t0:Date.now(), innings:[blank(), blank()]};
   Promise.all([importKey(K), makeSigner()]).then(([k])=>{ cryptoKey = k; startScorer(true); })
     .catch(()=>fail("This browser can't start a secure match. Update the browser and try again."));
 });
