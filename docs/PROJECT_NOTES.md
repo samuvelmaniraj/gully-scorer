@@ -57,6 +57,13 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Match end: TV-style summary image (1920×1080) with team bars, top 4 batters and bowlers (Full) or fours/sixes/extras/run rate (Quick), overs played / overs a side, team size, toss and result
 - WhatsApp text table sent with the image; Send as text and Copy text
 
+**Player stats (across matches)**
+- "Player stats" button on the New match screen: batting (M, R, HS, Avg, SR, 4s, 6s) and bowling (M, O, R, W, Best, Econ) tables, Share on WhatsApp / Copy text (top 10 each)
+- Saved on the scorer's phone only (`gullyStats` in local storage), nothing online. Only Full scorecard matches count; default names like "Player 3" are skipped; names match ignoring capitals and spaces
+- Each finished match is its own record keyed by match ID; Undo after the end updates or removes it. Viewer phones save nothing
+- Several scorers: each taps Save backup (a .json file, shared or downloaded) and sends it to one phone, which taps Merge a backup. Matches already there are skipped, so nothing is counted twice
+- Matches saved list with Remove; Delete all stats (tap twice)
+
 **Convenience**
 - Remember last match settings on the phone (team names, players, overs, toggles); Clear and start fresh
 - Install as an app on the home screen: icon, full screen, opens on weak signal. Android shows an "Install app" button (one tap, then confirm). iPhone can't do one-tap installs (Apple doesn't allow it), so it shows step-by-step instructions with icons for Safari or Chrome. Android falls back to menu steps if Chrome doesn't offer its install box. "Not now" hides the hint on that phone.
@@ -73,6 +80,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 | QR library copied into the repo, pinned with an integrity hash | Page runs only our own code; no outside script server |
 | Strict Content-Security-Policy in `index.html` | Blocks any script or connection not on the allow list |
 | Settings saved on the phone only | Convenience without storing anything online |
+| Player stats on the phone, one record per match ID, backup and merge by file | Keeps the no-storage-online rule; works with several scorers without double counting. Shared stats on the relay is a possible later option |
 | Network-first service worker, own files only | Opens at the ground on weak signal, updates still arrive straight away, relay traffic untouched |
 
 ## Accounts and secrets
@@ -102,10 +110,10 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 ## Roadmap
 
 **Planned next (ideas already in the plan)**
-1. Player stats across matches (stored on the phone only, or on the relay, to decide)
-2. Points table for a series or tournament (wins, losses, net run rate)
+1. Points table for a series or tournament (wins, losses, net run rate)
+2. Maybe later: shared stats for the whole group through the relay (encrypted, group link) if backup and merge isn't enough
 
-**Done:** Install as an app on the home screen; ball-by-ball commentary (16 Nov 2026)
+**Done:** Install as an app on the home screen; ball-by-ball commentary; player stats on the phone with backup and merge (16 Nov 2026)
 
 **Optional, later**
 - Custom domain (about US$10 a year)

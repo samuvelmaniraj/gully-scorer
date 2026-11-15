@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-z2HKVTQo82fgNDImXP3Mc2Z2lXPQTAKuLseu9bPz2aY=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aAP8DYJyHdEqa7uspulzaBNYCaz4YSdrciVFmxykvVU=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -145,6 +145,11 @@ td .how{display:block;font-size:12px;color:var(--muted)}
 .cl.w .t b{color:var(--ball)}
 .cl.ms{color:var(--amber);font-weight:600}
 .cTop{font-weight:600;padding:8px 10px;border-radius:10px;background:var(--turf-soft);color:var(--turf)}
+.srow td:first-child{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrow{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;border-top:1px solid var(--line)}
+.mrow:first-child{border-top:none}
+.mrow span{min-width:0}
+.mrow small{display:block;color:var(--muted)}
 .install{display:flex;flex-direction:column;gap:6px}
 .install p{margin:0}
 .install ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
@@ -223,7 +228,40 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
       <div id="setupErr" class="err"></div>
       <button class="btn" type="submit">Start match</button>
     </form>
+    <button type="button" class="btn ghost" id="statsBtn">Player stats</button>
     <p class="note">Keep this page open on the scorer's phone. Viewers watch live through the share link. No sign-up and nothing saved online. The match disappears from this phone when you end it.</p>
+  </section>
+
+  <section id="statsCard" class="card" hidden>
+    <div class="commHead"><h2>Player stats</h2><button type="button" class="btn ghost small" id="statsBack">Back</button></div>
+    <p class="note" id="statsInfo"></p>
+    <div id="statsBody">
+      <div class="seg2" id="statsTab" style="align-self:flex-start"><button type="button" data-t="bat" aria-pressed="true">Batting</button><button type="button" data-t="bowl" aria-pressed="false">Bowling</button></div>
+      <div id="statsTable"></div>
+      <div class="btns">
+        <a class="btn small" id="statsWa" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Share on WhatsApp</a>
+        <button type="button" class="btn ghost small" id="statsCopy">Copy text</button>
+      </div>
+      <pre id="statsTxt" class="note" style="white-space:pre-wrap;margin:0" hidden></pre>
+    </div>
+    <details class="toss" id="statsSync">
+      <summary>Backup and merge</summary>
+      <div class="tossIn">
+        <p class="note">More than one scorer? Each scorer taps <b>Save backup</b> and sends the file to one phone. On that phone, tap <b>Merge a backup</b> and pick the file. Matches already on the phone are skipped, so nothing is counted twice.</p>
+        <div class="btns">
+          <button type="button" class="btn ghost small" id="statsSave">Save backup</button>
+          <button type="button" class="btn ghost small" id="statsLoad">Merge a backup</button>
+        </div>
+        <input type="file" id="statsFile" accept=".json,application/json" hidden>
+        <p class="note" id="statsMsg" aria-live="polite"></p>
+      </div>
+    </details>
+    <details class="toss" id="statsMatches">
+      <summary>Matches saved</summary>
+      <div class="tossIn" id="statsList"></div>
+    </details>
+    <button type="button" class="btn danger small" id="statsClear">Delete all stats</button>
+    <p class="note">Stats are saved on this phone only, nothing online. Only Full scorecard matches count, because Quick score has no player names. The same name typed the same way (capitals and spaces don't matter) is the same player.</p>
   </section>
 
   <section id="boardWrap" hidden>
@@ -289,6 +327,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
       <button class="btn ghost small" id="copyCard">Copy text</button>
     </div>
     <pre id="cardTxt" class="note" style="white-space:pre-wrap;margin:0" hidden></pre>
+    <p class="note" id="statsSaved" hidden>Added to player stats on this phone.</p>
   </section>
 
   <details id="handCard" class="card sc" hidden>
@@ -532,6 +571,8 @@ function render(){
   if(S.done){ const t = scoreText(); $("cardTxt").textContent = t; $("waCard").href = "https://wa.me/?text=" + encodeURIComponent(t); if(sumFor !== S.v){ sumFor = S.v; drawSummary(); } }
 
   if(!isViewer){
+    syncStats();
+    $("statsSaved").hidden = !(S.done && full());
     const nd = need(i), locked = S.done || inn.done || !!nd || !!held;
     document.querySelectorAll("#pad button").forEach(b=>{ if(b.id!=="undoBtn") b.disabled = locked; });
     $("undoBtn").disabled = !canUndo();
@@ -678,6 +719,144 @@ function renderComm(){
 }
 $("commInn").addEventListener("click", e=>{ const b = e.target.closest("button[data-inn]"); if(!b) return; commSel = +b.dataset.inn; commAll = false; renderComm(); });
 $("commMore").onclick = ()=>{ commAll = !commAll; renderComm(); };
+/* ---------- player stats across matches: saved on this phone only ---------- */
+/* Each finished Full match is kept as its own record with the match ID, so merging another
+   phone's backup adds only matches this phone doesn't have: nothing is counted twice. */
+const STATKEY = "gullyStats";
+const nkey = t => String(t).trim().replace(/\s+/g," ").toLowerCase();
+const isDefaultName = t => /^player \d+$/i.test(String(t).trim()) || !String(t).trim();
+function cleanStats(o){
+  if(!o || o.app!=="gully-scorer-stats" || !Array.isArray(o.matches)) return [];
+  const n=(v,max)=>{ v=Math.floor(+v); return Number.isFinite(v)&&v>=0&&v<=max ? v : 0; };
+  const nm = t => String(t==null?"":t).replace(/\s+/g," ").trim().slice(0,20);
+  const out = [], seen = new Set();
+  for(const m of o.matches.slice(0,5000)){
+    if(!m || typeof m.id!=="string" || !/^[a-z0-9]{6,24}$/.test(m.id) || seen.has(m.id)) continue;
+    if(!Array.isArray(m.teams) || m.teams.length!==2) continue;
+    seen.add(m.id);
+    out.push({ id:m.id, at:n(m.at,9e15), teams:m.teams.map(nm), res:String(m.res||"").slice(0,80), ov:n(m.ov,50),
+      pl:(Array.isArray(m.pl)?m.pl.slice(0,30):[]).map(nm).filter(t=>t && !isDefaultName(t)),
+      bat:(Array.isArray(m.bat)?m.bat.slice(0,30):[]).map(b=>({n:nm(b&&b.n), r:n(b&&b.r,999), b:n(b&&b.b,999), f:n(b&&b.f,200), s:n(b&&b.s,200), o:!!(b&&b.o)})).filter(b=>b.n && !isDefaultName(b.n)),
+      bowl:(Array.isArray(m.bowl)?m.bowl.slice(0,30):[]).map(b=>({n:nm(b&&b.n), l:n(b&&b.l,600), r:n(b&&b.r,999), w:n(b&&b.w,15)})).filter(b=>b.n && !isDefaultName(b.n)) });
+  }
+  return out;
+}
+function loadStats(){ try{ return cleanStats(JSON.parse(localStorage.getItem(STATKEY)||"null")); }catch(e){ return []; } }
+function saveStats(list){ try{ localStorage.setItem(STATKEY, JSON.stringify({app:"gully-scorer-stats", v:1, matches:list})); return true; }catch(e){ return false; } }
+function matchRecord(){
+  const bat = [], bowl = [];
+  [0,1].forEach(i=>{
+    const inn = S.innings[i];
+    battedList(inn).forEach(p=>{ const f = batFig(inn,p); bat.push({n:pname(i,p), r:f.r, b:f.b, f:f.f, s:f.s, o:!!f.out}); });
+    bowledList(inn).forEach(p=>{ const f = bowlFig(inn,p); bowl.push({n:pname(1-i,p), l:f.legal, r:f.r, w:f.w}); });
+  });
+  return cleanStats({app:"gully-scorer-stats", matches:[{id:S.id, at:S.u||Date.now(), teams:S.teams, res:resultTxt(), ov:S.overs, pl:[...S.players[0], ...S.players[1]], bat, bowl}]})[0];
+}
+/* runs on the scorer's phone after every change: saves the match once it's over, removes it again if Undo reopens it */
+function syncStats(){
+  if(isViewer || !S || !full() || !S.id) return;
+  const list = loadStats(), ix = list.findIndex(m=>m.id===S.id);
+  if(S.done){
+    const r = matchRecord(); if(!r) return;
+    if(ix>=0 && JSON.stringify(list[ix])===JSON.stringify(r)) return;
+    if(ix>=0) list[ix] = r; else list.push(r);
+    saveStats(list);
+  } else if(ix>=0){ list.splice(ix,1); saveStats(list); }
+}
+function aggregate(list){
+  const P = new Map(), get = name => { const k = nkey(name); if(!P.has(k)) P.set(k, {name, m:0, inn:0, r:0, b:0, no:0, hs:-1, hsNo:false, f:0, s:0, fifties:0, l:0, rc:0, w:0, bw:-1, br:0}); const p = P.get(k); p.name = name; return p; };
+  list.slice().sort((a,b)=>a.at-b.at).forEach(m=>{
+    const inMatch = new Set();
+    [...m.pl, ...m.bat.map(b=>b.n), ...m.bowl.map(b=>b.n)].forEach(n=>{ const k = nkey(n); if(!inMatch.has(k)){ inMatch.add(k); get(n).m++; } });
+    m.bat.forEach(b=>{ const p = get(b.n); p.inn++; p.r += b.r; p.b += b.b; p.f += b.f; p.s += b.s; if(!b.o) p.no++; if(b.r>=50) p.fifties++;
+      if(b.r > p.hs || (b.r===p.hs && !b.o)){ p.hs = b.r; p.hsNo = !b.o; } });
+    m.bowl.forEach(b=>{ const p = get(b.n); p.l += b.l; p.rc += b.r; p.w += b.w; if(b.w > p.bw || (b.w===p.bw && b.r < p.br)){ p.bw = b.w; p.br = b.r; } });
+  });
+  const all = [...P.values()];
+  return {
+    bat: all.filter(p=>p.inn).sort((a,b)=>b.r-a.r || a.b-b.b),
+    bowl: all.filter(p=>p.l).sort((a,b)=>b.w-a.w || (a.rc/a.l)-(b.rc/b.l))
+  };
+}
+const avgTxt = p => p.inn-p.no ? (p.r/(p.inn-p.no)).toFixed(1) : "–";
+const srTxt = p => p.b ? Math.round(p.r*100/p.b) : "–";
+const econTxt = p => p.l ? (p.rc/(p.l/6)).toFixed(1) : "–";
+function statsText(list, A){
+  const L = ["*PLAYER STATS*", `${list.length} match${list.length===1?"":"es"}`];
+  if(A.bat.length){
+    const t = ["```", padE("Batting",11) + padS("R",4) + padS("HS",5) + padS("Avg",6) + padS("SR",5)];
+    A.bat.slice(0,10).forEach(p=>t.push(padE(p.name,11) + padS(p.r,4) + padS(p.hs+(p.hsNo?"*":""),5) + padS(avgTxt(p),6) + padS(srTxt(p),5)));
+    t.push("```"); L.push("", t.join("\n"));
+  }
+  if(A.bowl.length){
+    const t = ["```", padE("Bowling",11) + padS("W",3) + padS("O",6) + padS("Econ",6) + padS("Best",6)];
+    A.bowl.slice(0,10).forEach(p=>t.push(padE(p.name,11) + padS(p.w,3) + padS(oversTxt(p.l),6) + padS(econTxt(p),6) + padS(`${p.bw}/${p.br}`,6)));
+    t.push("```"); L.push("", t.join("\n"));
+  }
+  L.push("", "_Scored with Gully Scorer_");
+  return L.join("\n");
+}
+let statsTab = "bat";
+function renderStats(){
+  const list = loadStats(), A = aggregate(list);
+  $("statsInfo").textContent = list.length ? `${list.length} Full scorecard match${list.length===1?"":"es"} saved on this phone.` : "No matches yet. Stats start after your first Full scorecard match ends on this phone, or merge a backup from another scorer.";
+  $("statsBody").hidden = !list.length; $("statsMatches").hidden = !list.length; $("statsClear").hidden = !list.length;
+  document.querySelectorAll("#statsTab button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.t===statsTab));
+  let h = "";
+  if(statsTab==="bat"){
+    h = `<div class="tw"><table><thead><tr><th>Batter</th><th>M</th><th>R</th><th>HS</th><th>Avg</th><th>SR</th><th>4s</th><th>6s</th></tr></thead><tbody>` +
+      A.bat.map(p=>`<tr class="srow"><td>${esc(p.name)}</td><td>${p.m}</td><td><b>${p.r}</b></td><td>${p.hs}${p.hsNo?"*":""}</td><td>${avgTxt(p)}</td><td>${srTxt(p)}</td><td>${p.f}</td><td>${p.s}</td></tr>`).join("") + `</tbody></table></div>`;
+  } else {
+    h = `<div class="tw"><table><thead><tr><th>Bowler</th><th>M</th><th>O</th><th>R</th><th>W</th><th>Best</th><th>Econ</th></tr></thead><tbody>` +
+      A.bowl.map(p=>`<tr class="srow"><td>${esc(p.name)}</td><td>${p.m}</td><td>${oversTxt(p.l)}</td><td>${p.rc}</td><td><b>${p.w}</b></td><td>${p.bw}/${p.br}</td><td>${econTxt(p)}</td></tr>`).join("") + `</tbody></table></div>`;
+  }
+  $("statsTable").innerHTML = h;
+  const txt = statsText(list, A);
+  $("statsTxt").textContent = txt; $("statsWa").href = "https://wa.me/?text=" + encodeURIComponent(txt);
+  $("statsMatches").querySelector("summary").textContent = `Matches saved (${list.length})`;
+  $("statsList").innerHTML = list.slice().sort((a,b)=>b.at-a.at).map(m=>`<div class="mrow"><span>${esc(m.teams[0])} v ${esc(m.teams[1])}<small>${new Date(m.at).toLocaleDateString([], {day:"numeric", month:"short", year:"numeric"})} · ${esc(m.res)}</small></span><button type="button" class="btn danger small" data-del="${m.id}">Remove</button></div>`).join("");
+}
+function armed(btn, label, ms, go){
+  if(!btn.classList.contains("armed")){ btn.classList.add("armed"); btn.dataset.l = btn.textContent; btn.textContent = label; btn._t = setTimeout(()=>{ btn.classList.remove("armed"); btn.textContent = btn.dataset.l; }, ms); return; }
+  clearTimeout(btn._t); btn.classList.remove("armed"); btn.textContent = btn.dataset.l; go();
+}
+$("statsBtn").onclick = ()=>{ $("setup").hidden = true; $("statsCard").hidden = false; $("statsMsg").textContent = ""; renderStats(); scrollTo(0,0); };
+$("statsBack").onclick = ()=>{ $("statsCard").hidden = true; $("setup").hidden = false; scrollTo(0,0); };
+$("statsTab").addEventListener("click", e=>{ const b = e.target.closest("button[data-t]"); if(!b) return; statsTab = b.dataset.t; renderStats(); });
+$("statsCopy").onclick = ()=>copyText($("statsTxt").textContent, $("statsCopy"), $("statsTxt"));
+$("statsList").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-del]"); if(!b) return;
+  armed(b, "Tap again", 3000, ()=>{ saveStats(loadStats().filter(m=>m.id!==b.dataset.del)); renderStats(); });
+});
+$("statsClear").onclick = ()=>armed($("statsClear"), "Tap again to delete all stats on this phone", 4000, ()=>{ try{ localStorage.removeItem(STATKEY); }catch(e){} renderStats(); });
+$("statsSave").onclick = async ()=>{
+  const list = loadStats();
+  if(!list.length){ $("statsMsg").textContent = "Nothing to back up yet."; return; }
+  const d = new Date(), name = `gully-stats-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}.json`;
+  const blob = new Blob([JSON.stringify({app:"gully-scorer-stats", v:1, matches:list})], {type:"application/json"});
+  const file = new File([blob], name, {type:"application/json"});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file]}); $("statsMsg").textContent = "Send it to the phone that keeps the stats, then tap Merge a backup there."; return; }
+    catch(e){ if(e && e.name==="AbortError") return; }
+  }
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 10000);
+  $("statsMsg").textContent = `Saved ${name} to your downloads. Send it to the phone that keeps the stats.`;
+};
+$("statsLoad").onclick = ()=>{ $("statsFile").value = ""; $("statsFile").click(); };
+$("statsFile").onchange = async ()=>{
+  const f = $("statsFile").files[0]; if(!f) return;
+  if(f.size > 3e6){ $("statsMsg").textContent = "That file is too big to be a Gully Scorer backup."; return; }
+  let got = [];
+  try{ got = cleanStats(JSON.parse(await f.text())); }catch(e){}
+  if(!got.length){ $("statsMsg").textContent = "That isn't a Gully Scorer stats backup, or it has no matches."; return; }
+  const list = loadStats(), have = new Set(list.map(m=>m.id)), add = got.filter(m=>!have.has(m.id));
+  if(add.length && !saveStats(list.concat(add))){ $("statsMsg").textContent = "Couldn't save: this phone's storage for the app is full."; return; }
+  $("statsMsg").textContent = `Added ${add.length} new match${add.length===1?"":"es"}.` + (got.length-add.length ? ` ${got.length-add.length} already here, skipped.` : "");
+  renderStats();
+};
+
 
 /* ---------- match summary image (broadcast-style) ---------- */
 let sumBlob = null, sumFor = -1, sumUrl = null;

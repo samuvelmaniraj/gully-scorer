@@ -82,6 +82,21 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   if (process.env.SHOT) { await V.waitForTimeout(500); await V.setViewportSize({ width: 390, height: 2200 }); await V.locator("#commCard").screenshot({ path: process.env.SHOT }); }
   check("match summary image is made", await B.evaluate(() => !!sumBlob && sumBlob.size > 10000));
   check("summary text has the result", (await B.evaluate(() => scoreText())).includes(await B.evaluate(() => resultTxt().toUpperCase())));
+  // Player stats: saved on the scorer's phone when the match ends, merged on another phone without double counting
+  check("match saved to player stats", await B.isVisible("#statsSaved") && await B.evaluate(() => loadStats().length === 1));
+  check("viewer phone saves no stats", await V.evaluate(() => loadStats().length === 0));
+  const backup = await B.evaluate(() => localStorage.getItem("gullyStats"));
+  const D = await phone(); await D.goto(SITE); await D.click("#statsBtn");
+  check("stats screen starts empty", (await D.textContent("#statsInfo")).startsWith("No matches"));
+  const merge = async () => { await D.click("#statsSync summary").catch(() => {}); await D.setInputFiles("#statsFile", { name: "gully-stats.json", mimeType: "application/json", buffer: Buffer.from(backup) }); await D.waitForTimeout(300); return D.textContent("#statsMsg"); };
+  check("merging a backup adds the match", (await merge()).startsWith("Added 1 new match") && /Sam|Raj|Ali/.test(await D.textContent("#statsTable")));
+  check("merging again counts nothing twice", (await merge()).includes("Added 0 new matches. 1 already here") && await D.evaluate(() => loadStats().length === 1));
+  const runsB = await B.evaluate(() => [0, 1].reduce((t, i) => t + battedList(S.innings[i]).reduce((u, p) => u + batFig(S.innings[i], p).r, 0), 0));
+  check("stats totals match the scorecard", await D.evaluate(() => aggregate(loadStats()).bat.reduce((t, p) => t + p.r, 0)) === runsB);
+  await D.click('#statsTab [data-t="bowl"]'); check("bowling table shows", /Ben|Kumar|Dev/.test(await D.textContent("#statsTable")));
+  check("stats text for WhatsApp", (await D.textContent("#statsTxt")).includes("PLAYER STATS"));
+  if (process.env.SHOT) { await D.setViewportSize({ width: 390, height: 1400 }); await D.click('#statsTab [data-t="bat"]'); await D.click("#statsMatches summary"); await D.locator("#statsCard").screenshot({ path: process.env.SHOT.replace(".png", "-stats.png") }); }
+
   // Install as an app: manifest, icons and offline copy all load under the security rules
   const C = await phone(); await C.goto(SITE); await C.waitForTimeout(1500);
   const am = await (await C.context().newCDPSession(C)).send("Page.getAppManifest");
