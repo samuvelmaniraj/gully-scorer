@@ -215,6 +215,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
   <section id="statsCard" class="card" hidden>
     <div class="commHead"><h2>Player stats</h2><button type="button" class="btn ghost small" id="statsBack">Back</button></div>
     <p class="note" id="statsInfo"></p>
+    <div class="seg2" id="statsSrc" style="align-self:flex-start" hidden><button type="button" data-s="group" aria-pressed="true">Group</button><button type="button" data-s="phone" aria-pressed="false">This phone</button></div>
     <div id="statsBody">
       <div class="seg2" id="statsTab" style="align-self:flex-start"><button type="button" data-t="bat" aria-pressed="true">Batting</button><button type="button" data-t="bowl" aria-pressed="false">Bowling</button></div>
       <div id="statsTable"></div>
@@ -224,6 +225,30 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
       </div>
       <pre id="statsTxt" class="note" style="white-space:pre-wrap;margin:0" hidden></pre>
     </div>
+    <details class="toss" id="statsGroup">
+      <summary id="gSum">Share stats with your group</summary>
+      <div class="tossIn">
+        <div id="gNew">
+          <p class="note">Make one stats table for your whole group. Players open a link to see their stats any time, and every scorer's finished Full scorecard matches are added automatically. No accounts or logins. The stats are stored online but encrypted, so only people with your group's link can read them.</p>
+          <label for="gName">Group name<input id="gName" maxlength="30" placeholder="e.g. Sunday Turf Gang" autocomplete="off"></label>
+          <button type="button" class="btn small" id="gCreate">Create group</button>
+        </div>
+        <div id="gIn" hidden>
+          <p class="note" id="gRole"></p>
+          <div class="btns">
+            <a class="btn small" id="gInvite" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Invite players</a>
+            <button type="button" class="btn ghost small" id="gCopy">Copy players' link</button>
+          </div>
+          <div class="btns" id="gScorerBtns">
+            <a class="btn ghost small" id="gAddScorer" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Add another scorer</a>
+            <button type="button" class="btn ghost small" id="gRefresh">Refresh</button>
+          </div>
+          <p class="note" id="gScorerNote">Send the scorer link only to people who score. Anyone with it can add and remove matches. The players' link can only view.</p>
+          <button type="button" class="btn danger small" id="gLeave">Leave group on this phone</button>
+        </div>
+        <p class="note" id="gMsg" aria-live="polite"></p>
+      </div>
+    </details>
     <details class="toss" id="statsSync">
       <summary>Backup and merge</summary>
       <div class="tossIn">
@@ -241,7 +266,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
       <div class="tossIn" id="statsList"></div>
     </details>
     <button type="button" class="btn danger small" id="statsClear">Delete all stats</button>
-    <p class="note">Stats are saved on this phone only, nothing online. Only Full scorecard matches count, because Quick score has no player names. The same name typed the same way (capitals and spaces don't matter) is the same player.</p>
+    <p class="note" id="statsFoot">Only Full scorecard matches count, because Quick score has no player names. The same name typed the same way (capitals and spaces don't matter) is the same player.</p>
   </section>
 
   <section id="boardWrap" hidden>
@@ -742,6 +767,7 @@ function syncStats(){
     if(ix>=0 && JSON.stringify(list[ix])===JSON.stringify(r)) return;
     if(ix>=0) list[ix] = r; else list.push(r);
     saveStats(list);
+    if(GROUP && GROUP.t){ setPend(true); groupSync(); }
   } else if(ix>=0){ list.splice(ix,1); saveStats(list); }
 }
 function aggregate(list){
@@ -779,9 +805,15 @@ function statsText(list, A){
 }
 let statsTab = "bat";
 function renderStats(){
-  const list = loadStats(), A = aggregate(list);
-  $("statsInfo").textContent = list.length ? `${list.length} Full scorecard match${list.length===1?"":"es"} saved on this phone.` : "No matches yet. Stats start after your first Full scorecard match ends on this phone, or merge a backup from another scorer.";
-  $("statsBody").hidden = !list.length; $("statsMatches").hidden = !list.length; $("statsClear").hidden = !list.length;
+  const G = groupView(), list = G ? G.matches : loadStats(), A = aggregate(list);
+  const local = loadStats().length;
+  $("statsSrc").hidden = !GROUP || !local;
+  document.querySelectorAll("#statsSrc button").forEach(b=>b.setAttribute("aria-pressed", (b.dataset.s==="group") === !!G));
+  if(G) $("statsInfo").textContent = `${G.name}: ${list.length} match${list.length===1?"":"es"}` + (G.at ? ` · updated ${ago(G.at)}` : "") + (G.offline ? " · showing the last copy saved on this phone" : "");
+  else $("statsInfo").textContent = list.length ? `${list.length} Full scorecard match${list.length===1?"":"es"} saved on this phone.` : "No matches yet. Stats start after your first Full scorecard match ends on this phone, or merge a backup from another scorer.";
+  $("statsBody").hidden = !list.length; $("statsMatches").hidden = !list.length; $("statsClear").hidden = !list.length || !!G;
+  $("statsSync").hidden = !!G;
+  renderGroupBox();
   document.querySelectorAll("#statsTab button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.t===statsTab));
   let h = "";
   if(statsTab==="bat"){
@@ -795,19 +827,24 @@ function renderStats(){
   const txt = statsText(list, A);
   $("statsTxt").textContent = txt; $("statsWa").href = "https://wa.me/?text=" + encodeURIComponent(txt);
   $("statsMatches").querySelector("summary").textContent = `Matches saved (${list.length})`;
-  $("statsList").innerHTML = list.slice().sort((a,b)=>b.at-a.at).map(m=>`<div class="mrow"><span>${esc(m.teams[0])} v ${esc(m.teams[1])}<small>${new Date(m.at).toLocaleDateString([], {day:"numeric", month:"short", year:"numeric"})} · ${esc(m.res)}</small></span><button type="button" class="btn danger small" data-del="${m.id}">Remove</button></div>`).join("");
+  $("statsList").innerHTML = list.slice().sort((a,b)=>b.at-a.at).map(m=>`<div class="mrow"><span>${esc(m.teams[0])} v ${esc(m.teams[1])}<small>${new Date(m.at).toLocaleDateString([], {day:"numeric", month:"short", year:"numeric"})} · ${esc(m.res)}</small></span>${G && !GROUP.t ? "" : `<button type="button" class="btn danger small" data-del="${m.id}">Remove</button>`}</div>`).join("");
 }
 function armed(btn, label, ms, go){
   if(!btn.classList.contains("armed")){ btn.classList.add("armed"); btn.dataset.l = btn.textContent; btn.textContent = label; btn._t = setTimeout(()=>{ btn.classList.remove("armed"); btn.textContent = btn.dataset.l; }, ms); return; }
   clearTimeout(btn._t); btn.classList.remove("armed"); btn.textContent = btn.dataset.l; go();
 }
-$("statsBtn").onclick = ()=>{ $("setup").hidden = true; $("statsCard").hidden = false; $("statsMsg").textContent = ""; renderStats(); scrollTo(0,0); };
+function showStats(){ $("setup").hidden = true; $("statsCard").hidden = false; $("statsMsg").textContent = ""; renderStats(); scrollTo(0,0); if(GROUP) groupSync(); }
+$("statsBtn").onclick = showStats;
 $("statsBack").onclick = ()=>{ $("statsCard").hidden = true; $("setup").hidden = false; scrollTo(0,0); };
 $("statsTab").addEventListener("click", e=>{ const b = e.target.closest("button[data-t]"); if(!b) return; statsTab = b.dataset.t; renderStats(); });
 $("statsCopy").onclick = ()=>copyText($("statsTxt").textContent, $("statsCopy"), $("statsTxt"));
 $("statsList").addEventListener("click", e=>{
   const b = e.target.closest("button[data-del]"); if(!b) return;
-  armed(b, "Tap again", 3000, ()=>{ saveStats(loadStats().filter(m=>m.id!==b.dataset.del)); renderStats(); });
+  armed(b, "Tap again", 3000, ()=>{
+    const id = b.dataset.del;
+    saveStats(loadStats().filter(m=>m.id!==id));
+    if(groupView() && GROUP.t){ GROUP.del = [...new Set([...(GROUP.del||[]), id])]; saveGroup(); setPend(true); groupSync(); }
+    renderStats(); });
 });
 $("statsClear").onclick = ()=>armed($("statsClear"), "Tap again to delete all stats on this phone", 4000, ()=>{ try{ localStorage.removeItem(STATKEY); }catch(e){} renderStats(); });
 $("statsSave").onclick = async ()=>{
@@ -1407,6 +1444,149 @@ async function startViewer(id, k, x, y){
   });
 }
 
+
+/* ---------- group stats: one shared, encrypted stats table for a whole group ---------- */
+/* Players' link  #group-<id>.<key>          : read only
+   Scorer link    #gscore-<id>.<key>.<token>  : can add and remove matches
+   The key stays in the link (never sent anywhere); the relay stores only ciphertext and a hash of the token. */
+const GKEY = "gully-group", GCACHE = "gully-group-cache", GPEND = "gully-group-pend";
+let GROUP = null, statsSrc = "group", gBusy = false, gAgain = false, gOffline = false;
+try{
+  const g = JSON.parse(localStorage.getItem(GKEY)||"null");
+  if(g && /^[a-z0-9]{22}$/.test(g.id) && /^[A-Za-z0-9_-]{22}$/.test(g.k) && (g.t==null || /^[A-Za-z0-9_-]{43}$/.test(g.t)))
+    GROUP = {id:g.id, k:g.k, t:g.t||null, name:String(g.name||"Our group").slice(0,30), del:Array.isArray(g.del)?g.del.filter(x=>typeof x==="string").slice(0,500):[]};
+}catch(e){}
+function saveGroup(){ try{ GROUP ? localStorage.setItem(GKEY, JSON.stringify(GROUP)) : localStorage.removeItem(GKEY); }catch(e){} }
+const setPend = on => { try{ on ? localStorage.setItem(GPEND,"1") : localStorage.removeItem(GPEND); }catch(e){} };
+const isPend = () => { try{ return localStorage.getItem(GPEND)==="1"; }catch(e){ return false; } };
+const gMsg = t => { $("gMsg").textContent = t || ""; };
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+function ago(t){ const m = Math.round((Date.now()-t)/60000); return m<1 ? "just now" : m<60 ? `${m} min ago` : m<1440 ? `${Math.round(m/60)} h ago` : new Date(t).toLocaleDateString([], {day:"numeric", month:"short"}); }
+function randId(n){ const a = "abcdefghijkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(n)); return Array.from(r, x=>a[x % a.length]).join(""); }
+const groupLink = () => `${baseUrl()}#group-${GROUP.id}.${GROUP.k}`;
+const scorerLink = () => `${baseUrl()}#gscore-${GROUP.id}.${GROUP.k}.${GROUP.t}`;
+function cleanDoc(o){
+  if(!o || o.app!=="gully-scorer-group") return null;
+  return { app:"gully-scorer-group", v:1, name:String(o.name||"Our group").replace(/\s+/g," ").trim().slice(0,30) || "Our group",
+    matches: cleanStats({app:"gully-scorer-stats", matches:o.matches}),
+    del: Array.isArray(o.del) ? [...new Set(o.del.filter(x=>typeof x==="string" && /^[a-z0-9]{6,24}$/.test(x)))].slice(0,5000) : [] };
+}
+function readCache(){ try{ const c = JSON.parse(localStorage.getItem(GCACHE)||"null"); return c && c.id===GROUP.id ? {v:c.v|0, at:c.at||0, doc:cleanDoc(c.doc)} : null; }catch(e){ return null; } }
+function writeCache(doc, v){ try{ localStorage.setItem(GCACHE, JSON.stringify({id:GROUP.id, v, at:Date.now(), doc})); }catch(e){} }
+/* what the stats screen shows in group mode */
+function groupView(){
+  if(!GROUP || statsSrc!=="group") return null;
+  const c = readCache(), doc = c && c.doc;
+  return { name: (doc && doc.name) || GROUP.name, matches: doc ? doc.matches : [], at: c ? c.at : 0, offline: gOffline && !!c };
+}
+async function gSeal(obj){
+  const key = await importKey(GROUP.k), raw = new TextEncoder().encode(JSON.stringify(obj));
+  const z = await squeeze(raw, true).catch(()=>null), data = z || raw;
+  const body = new Uint8Array(1+data.length); body[0] = z ? 1 : 0; body.set(data, 1);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, body));
+  const all = new Uint8Array(12+ct.length); all.set(iv); all.set(ct, 12);
+  return "gs1." + b64e(all);
+}
+async function gOpen(txt){
+  if(typeof txt!=="string" || !txt.startsWith("gs1.") || txt.length>1000000) return null;
+  try{
+    const all = b64d(txt.slice(4)), key = await importKey(GROUP.k);
+    const pt = new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM", iv:all.slice(0,12)}, key, all.slice(12)));
+    const data = pt[0]===1 ? await squeeze(pt.slice(1), false) : pt.slice(1);
+    return cleanDoc(JSON.parse(new TextDecoder().decode(data)));
+  }catch(e){ return null; }
+}
+const gUrl = kind => `${OWN_RELAY}/g/grp-${GROUP.id}/${kind}`;
+async function gGet(){
+  const r = await fetch(gUrl("get"), {cache:"no-store", referrerPolicy:"no-referrer"});
+  if(!r.ok) throw new Error("get " + r.status);
+  const t = await r.text(), i = t.indexOf("\n");
+  return { v: parseInt(t.slice(0, i), 10) || 0, data: t.slice(i+1) };
+}
+/* newest copy of each match wins; removed matches stay removed */
+function mergeDoc(doc, local){
+  const del = new Set([...doc.del, ...(GROUP.del||[])]), by = new Map();
+  for(const m of [...doc.matches, ...local]){ if(del.has(m.id)) continue; const o = by.get(m.id); if(!o || m.at > o.at) by.set(m.id, m); }
+  return { ...doc, name: doc.name || GROUP.name, matches: [...by.values()].sort((a,b)=>a.at-b.at), del: [...del] };
+}
+const sig = d => JSON.stringify([d.name, d.matches.map(m=>[m.id, m.at]), d.del.slice().sort()]);
+async function groupSync(){
+  if(!GROUP || !OWN_RELAY) return;
+  if(gBusy){ gAgain = true; return; }
+  gBusy = true; gAgain = false;
+  try{
+    for(let tries = 0; tries < 5; tries++){
+      const {v, data} = await gGet();
+      gOffline = false;
+      let doc = data ? await gOpen(data) : null;
+      if(data && !doc){ gMsg("Couldn't read this group's stats. Check that the link was copied completely."); return; }
+      if(!doc){
+        if(!GROUP.t){ gMsg("This group has no stats yet, or it was deleted after a year with no matches."); writeCache({app:"gully-scorer-group", v:1, name:GROUP.name, matches:[], del:[]}, 0); return; }
+        doc = {app:"gully-scorer-group", v:1, name:GROUP.name, matches:[], del:[]};
+      }
+      if(doc.name && doc.name!==GROUP.name){ GROUP.name = doc.name; saveGroup(); }
+      if(!GROUP.t){ writeCache(doc, v); gMsg(""); return; }
+      const merged = mergeDoc(doc, loadStats());
+      if(v > 0 && sig(merged)===sig(doc)){ writeCache(doc, v); setPend(false); GROUP.del = []; saveGroup(); gMsg(""); return; }
+      const r = await fetch(gUrl("put"), {method:"POST", body: await gSeal(merged), cache:"no-store", referrerPolicy:"no-referrer", headers:{"X-Token":GROUP.t, "X-Base":String(v)}});
+      if(r.ok){ writeCache(merged, parseInt(await r.text(),10)||v+1); setPend(false); GROUP.del = []; saveGroup(); gMsg("Group stats updated."); return; }
+      if(r.status===403){ gMsg("The group didn't accept this phone's scorer link. Ask your group for the scorer link again."); return; }
+      if(r.status===409 || r.status===429){ await sleep(1200); continue; } /* someone else saved first: merge again */
+      throw new Error("put " + r.status);
+    }
+    gMsg("The group is busy. Your matches will be added next time.");
+  }catch(e){
+    gOffline = true;
+    if(GROUP && GROUP.t && isPend()) gMsg("No connection. Your matches will be added to the group when you're back online.");
+    else gMsg("No connection. Showing the last copy saved on this phone.");
+  }finally{
+    gBusy = false;
+    if(!$("statsCard").hidden) renderStats();
+    if(gAgain) groupSync();
+  }
+}
+addEventListener("online", ()=>{ if(GROUP && (isPend() || !$("statsCard").hidden)) groupSync(); });
+function renderGroupBox(){
+  $("gNew").hidden = !!GROUP; $("gIn").hidden = !GROUP;
+  $("gSum").textContent = GROUP ? `Group: ${GROUP.name}` : "Share stats with your group";
+  if(!GROUP) return;
+  $("gRole").textContent = GROUP.t
+    ? "This phone is a scorer for the group. Your finished Full scorecard matches are added automatically."
+    : "This phone can view the group's stats. To add matches from this phone, ask for the scorer link.";
+  $("gScorerBtns").hidden = $("gScorerNote").hidden = !GROUP.t;
+  const invite = `*${GROUP.name}* player stats on TurfCricScore 🏏\nRuns, wickets and averages for everyone, updated after every match:\n${groupLink()}`;
+  $("gInvite").href = "https://wa.me/?text=" + encodeURIComponent(invite);
+  if(GROUP.t) $("gAddScorer").href = "https://wa.me/?text=" + encodeURIComponent(`Scorer link for *${GROUP.name}* on TurfCricScore. Keep it private: it lets you add matches to the group's stats.\n${scorerLink()}`);
+}
+$("statsSrc").addEventListener("click", e=>{ const b = e.target.closest("button[data-s]"); if(!b) return; statsSrc = b.dataset.s; renderStats(); });
+$("gCreate").onclick = async ()=>{
+  const name = $("gName").value.replace(/\s+/g," ").trim().slice(0,30) || "Our group";
+  GROUP = { id: randId(22), k: b64e(crypto.getRandomValues(new Uint8Array(16))), t: b64e(crypto.getRandomValues(new Uint8Array(32))), name, del:[] };
+  saveGroup(); setPend(true); statsSrc = "group";
+  writeCache({app:"gully-scorer-group", v:1, name, matches:loadStats(), del:[]}, 0);
+  $("statsGroup").open = true; renderStats(); gMsg("Creating your group…");
+  await groupSync();
+  if(!gOffline) gMsg("Group created. Tap Invite players to send the link to your WhatsApp group.");
+};
+$("gCopy").onclick = ()=>{ gMsg(groupLink()); copyText(groupLink(), $("gCopy"), $("gMsg")); };
+$("gRefresh").onclick = ()=>groupSync();
+$("gLeave").onclick = ()=>armed($("gLeave"), "Tap again to leave", 4000, ()=>{
+  try{ localStorage.removeItem(GCACHE); }catch(e){}
+  setPend(false); GROUP = null; saveGroup(); gMsg("This phone left the group. The group's stats are still there for everyone else, and you can rejoin with its link.");
+  renderStats();
+});
+/* opening a group link: remember the group on this phone */
+function openGroupLink(id, k, t){
+  const same = GROUP && GROUP.id===id;
+  if(!same){ try{ localStorage.removeItem(GCACHE); }catch(e){} }
+  GROUP = { id, k, t: t || (same ? GROUP.t : null), name: same ? GROUP.name : "Group", del: same ? GROUP.del : [] };
+  saveGroup(); statsSrc = "group";
+  if(GROUP.t){ setPend(true); setTimeout(groupSync, 800); }
+  history.replaceState(null, "", baseUrl());
+}
+if(GROUP && GROUP.t && isPend()) setTimeout(groupSync, 1500);
+
 /* ---------- install as an app ---------- */
 // The service worker keeps a copy of this site's own files on the phone; it never touches relay traffic.
 if("serviceWorker" in navigator && location.protocol==="https:"){
@@ -1463,6 +1643,9 @@ if("serviceWorker" in navigator && location.protocol==="https:"){
 /* ---------- boot ---------- */
 (async function boot(){
   const ID = "([a-z0-9]{10,24})", K22 = "([A-Za-z0-9_-]{22})", P43 = "([A-Za-z0-9_-]{43})";
+  let openStats = false;
+  let g = location.hash.match(new RegExp(`^#group-([a-z0-9]{22})\\.${K22}$`)) || location.hash.match(new RegExp(`^#gscore-([a-z0-9]{22})\\.${K22}\\.${P43}$`));
+  if(g){ openGroupLink(g[1], g[2], g[3]); openStats = true; }
   let m = location.hash.match(new RegExp(`^#watch-${ID}\\.${K22}\\.${P43}\\.${P43}$`));
   if(m){ startViewer(m[1], m[2], m[3], m[4]); return; }
   m = location.hash.match(new RegExp(`^#score-${ID}\\.${K22}\\.${P43}\\.${P43}\\.${P43}$`));
@@ -1482,5 +1665,6 @@ if("serviceWorker" in navigator && location.protocol==="https:"){
     }
     localStorage.removeItem(KEY);
   }catch(e){}
+  if(openStats){ showStats(); $("statsGroup").open = true; }
 })();
 </script>

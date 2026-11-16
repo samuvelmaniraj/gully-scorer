@@ -1,11 +1,16 @@
 /* Gully Scorer relay (deployed by GitHub Actions): passes encrypted, signed score updates from the scorer's phone to viewers.
    It never sees the score: messages are encrypted on the phone and the key stays in the link.
-   Each match keeps only its latest message, deleted 12 hours after the last update. */
+   Each match keeps only its latest message, deleted 12 hours after the last update.
+   Groups keep one encrypted stats file (all matches of a group). Only phones with the group's scorer
+   link can change it (they prove it with a secret token; the relay keeps only its SHA-256 hash).
+   A group is deleted after 12 months with no new matches. */
 import { DurableObject } from "cloudflare:workers";
 
 const ORIGINS = ["https://turfcricscore.com", "https://samuvelmaniraj.github.io"];
 const TOPIC = /^gullyscorer-[a-z0-9]{10,24}$/;
 const MAX_BYTES = 16384, TTL_MS = 12 * 3600 * 1000, MIN_GAP_MS = 250;
+const GROUP = /^grp-[a-z0-9]{20,32}$/, TOKEN = /^[A-Za-z0-9_-]{43}$/;
+const GROUP_MAX = 1000000, GROUP_TTL_MS = 365 * 24 * 3600 * 1000, GROUP_GAP_MS = 1000;
 
 const corsFor = origin => ORIGINS.includes(origin) ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {};
 
@@ -14,13 +19,21 @@ export default {
     const origin = req.headers.get("Origin") || "";
     const cors = corsFor(origin);
     if (req.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: { ...cors, "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Max-Age": "86400" } });
+      return new Response(null, { status: 204, headers: { ...cors, "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Allow-Headers": "X-Token, X-Base", "Access-Control-Max-Age": "86400" } });
     }
     /* only the Gully Scorer site may use this relay */
     if (!ORIGINS.includes(origin)) return new Response("Forbidden", { status: 403 });
-    const m = new URL(req.url).pathname.match(/^\/t\/([^/]+)\/(ws|latest|send)$/);
-    if (!m || !TOPIC.test(m[1])) return new Response("Not found", { status: 404, headers: cors });
-    const res = await env.MATCH.get(env.MATCH.idFromName(m[1])).fetch(req);
+    const path = new URL(req.url).pathname;
+    const g = path.match(/^\/g\/([^/]+)\/(get|put)$/);
+    let res;
+    if (g) {
+      if (!GROUP.test(g[1])) return new Response("Not found", { status: 404, headers: cors });
+      res = await env.GROUP.get(env.GROUP.idFromName(g[1])).fetch(req);
+    } else {
+      const m = path.match(/^\/t\/([^/]+)\/(ws|latest|send)$/);
+      if (!m || !TOPIC.test(m[1])) return new Response("Not found", { status: 404, headers: cors });
+      res = await env.MATCH.get(env.MATCH.idFromName(m[1])).fetch(req);
+    }
     if (res.status === 101) return res;
     const out = new Response(res.body, res);
     for (const [k, v] of Object.entries(cors)) out.headers.set(k, v);
@@ -69,4 +82,37 @@ export class Match extends DurableObject {
     for (const ws of this.ctx.getWebSockets()) { try { ws.close(1000, "match expired"); } catch (e) {} }
     await this.ctx.storage.deleteAll();
   }
+}
+
+/* One group's shared stats: a single encrypted file with a version number.
+   Writes need the scorer token and the version the phone last saw, so two scorers saving at the
+   same moment can't overwrite each other: the second gets 409 and merges again. */
+const sha256 = async t => btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)))));
+const same = (a, b) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; };
+export class Group extends DurableObject {
+  constructor(ctx, env) { super(ctx, env); this.lastAt = 0; }
+  async fetch(req) {
+    const kind = new URL(req.url).pathname.split("/").pop(), nc = { "Cache-Control": "no-store" };
+    if (kind === "get" && req.method === "GET") {
+      const v = (await this.ctx.storage.get("v")) || 0, data = (await this.ctx.storage.get("data")) || "";
+      return new Response(`${v}\n${data}`, { headers: { "Content-Type": "text/plain", ...nc } });
+    }
+    if (kind === "put" && req.method === "POST") {
+      const token = req.headers.get("X-Token") || "", base = Number(req.headers.get("X-Base"));
+      if (!TOKEN.test(token) || !Number.isInteger(base) || base < 0) return new Response("Bad request", { status: 400 });
+      const body = await req.text();
+      if (!body.startsWith("gs1.") || body.length > GROUP_MAX) return new Response("Bad data", { status: 400 });
+      const now = Date.now();
+      if (now - this.lastAt < GROUP_GAP_MS) return new Response("Too fast", { status: 429 });
+      const hash = await this.ctx.storage.get("hash"), v = (await this.ctx.storage.get("v")) || 0;
+      if (hash ? !same(hash, await sha256(token)) : base !== 0) return new Response("Not allowed", { status: 403 });
+      if (base !== v) return new Response(String(v), { status: 409, headers: nc });
+      this.lastAt = now;
+      await this.ctx.storage.put({ hash: hash || await sha256(token), v: v + 1, data: body });
+      await this.ctx.storage.setAlarm(now + GROUP_TTL_MS);
+      return new Response(String(v + 1), { headers: nc });
+    }
+    return new Response("Method not allowed", { status: 405 });
+  }
+  async alarm() { await this.ctx.storage.deleteAll(); }
 }

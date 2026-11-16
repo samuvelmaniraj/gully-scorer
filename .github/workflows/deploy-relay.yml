@@ -32,3 +32,6 @@ jobs:
           code=$(curl --http1.1 -s -o /dev/null -w "%{http_code}" --max-time 5 -H "$O" -H "Connection: Upgrade" -H "Upgrade: websocket" \
             -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$U/ws" || true)
           echo "live connection status: $code"; test "$code" = 101
+          GU="https://gully-relay.s-samuvelmaniraj.workers.dev/g/grp-ci$(date +%s)abcdefghjkmnpq"
+          test "$(curl -fsS -H "$O" "$GU/get" | head -1)" = "0" && echo "group read: ok"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "$O" -H "X-Token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" -H "X-Base: 5" --data gs1.x "$GU/put")" = 403 && echo "group needs the right token: ok"

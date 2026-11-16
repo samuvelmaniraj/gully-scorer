@@ -9,7 +9,7 @@ let failed = 0;
 const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok ? "PASS" : "FAIL"}  ${label}${extra ? "  (" + extra + ")" : ""}`); };
 
 (async () => {
-  const browser = await chromium.launch(), store = {}, sockets = [], errors = [];
+  const browser = await chromium.launch(), store = {}, sockets = [], errors = [], groups = {};
   const phone = async () => {
     const ctx = await browser.newContext();
     await ctx.route(/.*/, async route => {
@@ -20,7 +20,18 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
         return route.fulfill({ status: 200, contentType: type, body: fs.readFileSync(path.join(ROOT, f)) });
       }
       if (u.host.endsWith("workers.dev")) {
-        const [, , topic, kind] = u.pathname.split("/"), cors = { "Access-Control-Allow-Origin": "*" };
+        const [, area, topic, kind] = u.pathname.split("/"), cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "X-Token, X-Base" };
+        if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors, body: "" });
+        if (area === "g") { /* same rules as worker/relay.js Group */
+          const g = groups[topic] ||= { v: 0, data: "", token: null };
+          if (kind === "get") return route.fulfill({ status: 200, headers: cors, body: `${g.v}\n${g.data}` });
+          const h = req.headers(), token = h["x-token"], base = Number(h["x-base"]), body = req.postData() || "";
+          if (!/^[A-Za-z0-9_-]{43}$/.test(token || "") || !body.startsWith("gs1.")) return route.fulfill({ status: 400, headers: cors, body: "Bad" });
+          if (g.token ? g.token !== token : base !== 0) return route.fulfill({ status: 403, headers: cors, body: "Not allowed" });
+          if (base !== g.v) return route.fulfill({ status: 409, headers: cors, body: String(g.v) });
+          Object.assign(g, { v: g.v + 1, data: body, token: g.token || token });
+          return route.fulfill({ status: 200, headers: cors, body: String(g.v) });
+        }
         if (kind === "send") { const m = req.postData() || ""; store[topic] = m; sockets.filter(s => s.topic === topic).forEach(s => s.ws.send(m)); return route.fulfill({ status: 200, headers: cors, body: "ok" }); }
         return route.fulfill({ status: 200, headers: cors, body: store[topic] || "" });
       }
@@ -110,6 +121,40 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   await D.click('#statsTab [data-t="bowl"]'); check("bowling table shows", /Ben|Kumar|Dev/.test(await D.textContent("#statsTable")));
   check("stats text for WhatsApp", (await D.textContent("#statsTxt")).includes("PLAYER STATS"));
   if (process.env.SHOT) { await D.setViewportSize({ width: 390, height: 1400 }); await D.click('#statsTab [data-t="bat"]'); await D.click("#statsMatches summary"); await D.locator("#statsCard").screenshot({ path: process.env.SHOT.replace(".png", "-stats.png") }); }
+
+  // Group stats: one shared encrypted table; players' link views, scorer link adds
+  const rec = (id, who, runs) => ({ id, at: Date.now(), teams: ["Reds", "Blues"], res: "Reds won", ov: 2, pl: [who], bat: [{ n: who, r: runs, b: 10, f: 1, s: 1, o: false }], bowl: [{ n: "Yan", l: 12, r: 20, w: 2 }] });
+  await D.click("#statsGroup summary"); await D.fill("#gName", "Test Gang"); await D.click("#gCreate"); await D.waitForTimeout(800);
+  const gid = Object.keys(groups)[0], G0 = groups[gid] || {};
+  check("scorer creates a group", G0.v === 1 && (await D.textContent("#gMsg")).includes("Group created"), await D.textContent("#gMsg"));
+  check("group stats are encrypted on the relay", G0.data.startsWith("gs1.") && !/Sam|Raj|Test Gang/.test(G0.data));
+  const viewLink = await D.evaluate(() => groupLink()), scoreLink = await D.evaluate(() => scorerLink());
+  check("players' link has no scorer token", !viewLink.includes(await D.evaluate(() => GROUP.t)) && /#group-/.test(viewLink));
+  const P = await phone(); await P.goto(viewLink); await P.waitForTimeout(1000);
+  check("player opens the group's stats", (await P.textContent("#statsInfo")).startsWith("Test Gang: 1 match") && /Sam|Raj|Ali/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
+  check("link key is cleared from the address bar", await P.evaluate(() => location.hash === ""));
+  check("player can't add or remove matches", await P.isHidden("#gScorerBtns") && !(await P.$("#statsList [data-del]")));
+  const E = await phone(); await E.goto(scoreLink); await E.waitForTimeout(800);
+  check("second scorer joins with the scorer link", await E.evaluate(() => !!GROUP.t) && (await E.textContent("#gRole")).includes("scorer"));
+  await D.evaluate(r => { saveStats([...loadStats(), r]); }, rec("dddddd1", "Dinesh", 30));
+  await E.evaluate(r => { saveStats([...loadStats(), r]); }, rec("eeeeee1", "Elan", 44));
+  await Promise.all([D.evaluate(() => groupSync()), E.evaluate(() => groupSync())]); await D.waitForTimeout(3000);
+  await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
+  check("two scorers saving at once both count", (await P.textContent("#statsInfo")).startsWith("Test Gang: 3 matches") && /Dinesh/.test(await P.textContent("#statsTable")) && /Elan/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
+  await E.click("#statsMatches summary").catch(() => {});
+  await E.click('#statsList [data-del="eeeeee1"]'); await E.click('#statsList [data-del="eeeeee1"]'); await E.waitForTimeout(1500);
+  await D.evaluate(r => { saveStats([...loadStats(), r]); return groupSync(); }, rec("eeeeee1", "Elan", 44)); await D.waitForTimeout(500);
+  await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
+  check("a removed match stays removed", (await P.textContent("#statsInfo")).startsWith("Test Gang: 2 matches") && !/Elan/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
+  const finished = await B.evaluate(() => JSON.parse(JSON.stringify(S)));
+  await E.evaluate(st => { st.id = "eeefinish1"; S = clean(st); isViewer = false; syncStats(); }, finished); await E.waitForTimeout(1500);
+  await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
+  check("a finished match on a scorer's phone goes to the group", (await P.textContent("#statsInfo")).startsWith("Test Gang: 3 matches"), await P.textContent("#statsInfo"));
+  if (process.env.SHOT) { await P.setViewportSize({ width: 390, height: 1500 }); await P.click("#statsGroup summary"); await P.locator("#statsCard").screenshot({ path: "/tmp/grp-player.png" });
+    await D.setViewportSize({ width: 390, height: 1700 }); await D.evaluate(() => groupSync()); await D.waitForTimeout(600); await D.locator("#statsCard").screenshot({ path: "/tmp/grp-scorer.png" }); }
+  const F = await phone(); await F.goto(scoreLink.replace(/\.[A-Za-z0-9_-]{43}$/, "." + "Z".repeat(43))); await F.waitForTimeout(400);
+  await F.evaluate(r => { saveStats([r]); return groupSync(); }, rec("ffffff1", "Faker", 99)); await F.waitForTimeout(300);
+  check("a fake scorer link can't add matches", (await F.textContent("#gMsg")).includes("didn't accept") && groups[gid].v === (await P.evaluate(() => readCache().v)));
 
   // Install as an app: manifest, icons and offline copy all load under the security rules
   const C = await phone(); await C.goto(SITE); await C.waitForTimeout(1500);

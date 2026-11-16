@@ -7,6 +7,14 @@ workers_dev = true
 name = "MATCH"
 class_name = "Match"
 
+[[durable_objects.bindings]]
+name = "GROUP"
+class_name = "Group"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Match"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Group"]

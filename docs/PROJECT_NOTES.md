@@ -2,7 +2,7 @@
 
 Live scoring for gully and box cricket. One phone scores, everyone else watches live through a link or QR code. Free to run, no sign-up, privacy first.
 
-Last updated: 16 Nov 2026
+Last updated: 17 Nov 2026
 
 ## Links
 
@@ -17,7 +17,7 @@ Last updated: 16 Nov 2026
 ## Goals and rules we set
 
 - **Simple and fast for gully cricket.** Big tap buttons, works one-handed, starts in seconds.
-- **No accounts, no database.** Nothing about players or matches is stored online for long.
+- **No accounts, no database.** Nothing about players or matches is stored online for long, except group stats a group chooses to share (encrypted, deleted after 12 months with no new matches).
 - **Privacy is very important.** Scores are end-to-end encrypted; the relay can't read them.
 - **Free to run.** GitHub Pages and Cloudflare free plans.
 - Typical use: Quick score, 12 overs a side, 6 or 7 players a side, 4 to 5 matches a day.
@@ -67,6 +67,16 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Several scorers: each taps Save backup (a .json file, shared or downloaded) and sends it to one phone, which taps Merge a backup. Matches already there are skipped, so nothing is counted twice
 - Matches saved list with Remove; Delete all stats (tap twice)
 
+**Group stats (shared, optional)**
+- Player stats → "Share stats with your group" → name → Create group. Two links: **players' link** `#group-<id>.<key>` (view only) and **scorer link** `#gscore-<id>.<key>.<token>` (can add and remove matches; send privately)
+- No accounts. The group's stats are one file on the relay, encrypted with the key from the link (AES-GCM); the relay only sees ciphertext and a SHA-256 hash of the scorer token
+- Scorer phones add each finished Full match automatically; offline phones retry when back online or when Player stats is opened. Merge keeps the newest copy of each match by match ID, so nothing is counted twice
+- Two scorers saving at once: the relay accepts only the version the phone last saw (409 otherwise) and the phone merges again
+- Removing a match on a scorer phone removes it for the whole group (kept as a removed ID so other phones don't add it back)
+- The link's key is cleared from the address bar after opening. "Leave group on this phone" forgets the group on that phone only
+- A phone keeps one group. Viewers see a Group / This phone switch only if the phone also has its own stats
+- Relay: `/g/grp-<id>/get` returns `version\ndata`; `/g/grp-<id>/put` needs headers `X-Token` and `X-Base`; up to 1 MB; one save a second; deleted 12 months after the last save
+
 **Convenience**
 - Remember last match settings on the phone (team names, players, overs, toggles); Clear and start fresh
 - Install as an app on the home screen: icon, full screen, opens on weak signal. Android shows an "Install app" button (one tap, then confirm). iPhone can't do one-tap installs (Apple doesn't allow it), so it shows step-by-step instructions with icons for Safari or Chrome. Android falls back to menu steps if Chrome doesn't offer its install box. "Not now" hides the hint on that phone.
@@ -85,6 +95,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 | Renamed to TurfCricScore, own domain turfcricscore.com | "Gully Scorer" / gullyscorer.com is an existing Play Store app (com.gullyscorer.app), and several "Gully Score" apps exist; .com chosen for a global audience. Hosting stays on GitHub Pages; the page's security rules and the relay accept both addresses during the move |
 | Settings saved on the phone only | Convenience without storing anything online |
 | Player stats on the phone, one record per match ID, backup and merge by file | Keeps the no-storage-online rule; works with several scorers without double counting. Shared stats on the relay is a possible later option |
+| Group stats on the relay, encrypted, links instead of logins | Players wanted to see their own stats any time. Links keep it account-free; the relay can't read names or scores; scorer token separates view and add |
 | Network-first service worker, own files only | Opens at the ground on weak signal, updates still arrive straight away, relay traffic untouched |
 
 ## Accounts and secrets
@@ -100,7 +111,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - **Edit the page:** change `src/gully-scorer.html`, then run `python3 tools/build.py` to make `index.html`. Commit both. Pages updates in about a minute.
   - The build is required: `index.html` pins the inline script by its hash, so an edited page without a rebuild won't run.
   - Installed phones get the new version the next time the app is opened with signal (the service worker checks the network first).
-- **Edit the relay:** change `worker/relay.js` and push. GitHub Actions ("Deploy relay") deploys it, then checks send, latest, origin blocking and the live connection.
+- **Edit the relay:** change `worker/relay.js` and push. GitHub Actions ("Deploy relay") deploys it, then checks send, latest, origin blocking, the live connection, group read and group token check. New Durable Object classes need a new `[[migrations]]` tag in `worker/wrangler.toml`.
 - **Tests:** `node tests/relay.test.mjs` (relay logic) and `node tests/e2e.js` (three simulated phones, needs Playwright).
 - **Format changes:** if the link or message format changes, old match links stop working. Tell users to start a new match after updates.
 
@@ -115,9 +126,8 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 
 **Planned next (ideas already in the plan)**
 1. Points table for a series or tournament (wins, losses, net run rate)
-2. Maybe later: shared stats for the whole group through the relay (encrypted, group link) if backup and merge isn't enough
 
-**Done:** Install as an app on the home screen; ball-by-ball commentary; player stats on the phone with backup and merge (16 Nov 2026)
+**Done:** Install as an app on the home screen; ball-by-ball commentary; player stats on the phone with backup and merge (16 Nov 2026); shared group stats with players' and scorer links (17 Nov 2026)
 
 **Future (big project):** camera with scorecard overlay, YouTube live, and automatic highlight clips from ball times. Step 1 done: every ball is timed (16 Nov 2026). Next steps when ready: scoreboard overlay link for streaming apps, then an Android app.
 
