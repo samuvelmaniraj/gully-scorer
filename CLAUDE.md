@@ -1,4 +1,6 @@
-# Gully Scorer: guide for Claude
+# TurfCricScore (repo: gully-scorer): guide for Claude
+
+The app is called TurfCricScore and lives at https://turfcricscore.com (GitHub Pages custom domain). Internal names (repo, storage keys, `gully-scorer-stats` backup id, `g2.` messages) stay as they are so old data and links keep working.
 
 Full background, decisions and roadmap: `docs/PROJECT_NOTES.md`. Read it before larger changes.
 

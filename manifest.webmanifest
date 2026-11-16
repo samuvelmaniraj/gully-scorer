@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Gully Scorer",
-  "short_name": "Gully Scorer",
+  "name": "TurfCricScore",
+  "short_name": "TurfCricScore",
   "description": "Live scoring for gully and box cricket. One phone scores, everyone watches live.",
   "start_url": "./",
   "scope": "./",

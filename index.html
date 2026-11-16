@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XwUH125+0DPabyENhBxJG+QLcW5YFnHr7/bBDG1mgrs=' https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-acavRgESoIoElR5rQ1RRAJybLMV7Ou1WS1TuJsShFsc=' https://turfcricscore.com/qrcode.min.js https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://turfcricscore.com/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://turfcricscore.com/apple-touch-icon.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://turfcricscore.com/manifest.webmanifest https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://turfcricscore.com/sw.js https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Gully Scorer">
+<meta name="apple-mobile-web-app-title" content="TurfCricScore">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#F3F5F2" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0F1612" media="(prefers-color-scheme: dark)">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
-<title>Gully Scorer</title>
+<title>TurfCricScore</title>
 <style>
 /* Layout: one narrow column like a scorer's clipboard; scoreboard on top, big tap pad below */
 :root{
@@ -172,13 +172,13 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
 
 <div class="wrap">
   <header>
-    <div class="brand">Gully<span>·</span>Scorer</div>
+    <div class="brand">TurfCric<span>·</span>Score</div>
     <span id="net" class="chip">Not started</span>
   </header>
 
   <section id="setup" class="card">
     <div id="installNote" class="note banner install" hidden>
-      <p id="installTxt">Add Gully Scorer to your home screen to start a match in one tap.</p>
+      <p id="installTxt">Add TurfCricScore to your home screen to start a match in one tap.</p>
       <ol id="installSteps" hidden></ol>
       <p><button type="button" class="linkbtn" id="installBtn" hidden>Install app</button> <button type="button" class="linkbtn" id="installHide">Not now</button></p>
     </div>
@@ -640,7 +640,7 @@ function scoreText(){
       "```"].join("\n"));
   }
   L.push("", S.done ? `*${resultTxt().toUpperCase()}*` : "Match in progress");
-  L.push("_Scored with Gully Scorer_");
+  L.push("_Scored with TurfCricScore_");
   return L.join("\n");
 }
 $("copyCard").onclick = ()=>copyText(scoreText(), $("copyCard"), $("cardTxt"));
@@ -794,7 +794,7 @@ function statsText(list, A){
     A.bowl.slice(0,10).forEach(p=>t.push(padE(p.name,11) + padS(p.w,3) + padS(oversTxt(p.l),6) + padS(econTxt(p),6) + padS(`${p.bw}/${p.br}`,6)));
     t.push("```"); L.push("", t.join("\n"));
   }
-  L.push("", "_Scored with Gully Scorer_");
+  L.push("", "_Scored with TurfCricScore_");
   return L.join("\n");
 }
 let statsTab = "bat";
@@ -833,7 +833,7 @@ $("statsClear").onclick = ()=>armed($("statsClear"), "Tap again to delete all st
 $("statsSave").onclick = async ()=>{
   const list = loadStats();
   if(!list.length){ $("statsMsg").textContent = "Nothing to back up yet."; return; }
-  const d = new Date(), name = `gully-stats-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}.json`;
+  const d = new Date(), name = `turfcricscore-stats-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}.json`;
   const blob = new Blob([JSON.stringify({app:"gully-scorer-stats", v:1, matches:list})], {type:"application/json"});
   const file = new File([blob], name, {type:"application/json"});
   if(navigator.canShare && navigator.canShare({files:[file]})){
@@ -848,10 +848,10 @@ $("statsSave").onclick = async ()=>{
 $("statsLoad").onclick = ()=>{ $("statsFile").value = ""; $("statsFile").click(); };
 $("statsFile").onchange = async ()=>{
   const f = $("statsFile").files[0]; if(!f) return;
-  if(f.size > 3e6){ $("statsMsg").textContent = "That file is too big to be a Gully Scorer backup."; return; }
+  if(f.size > 3e6){ $("statsMsg").textContent = "That file is too big to be a TurfCricScore backup."; return; }
   let got = [];
   try{ got = cleanStats(JSON.parse(await f.text())); }catch(e){}
-  if(!got.length){ $("statsMsg").textContent = "That isn't a Gully Scorer stats backup, or it has no matches."; return; }
+  if(!got.length){ $("statsMsg").textContent = "That isn't a TurfCricScore stats backup, or it has no matches."; return; }
   const list = loadStats(), have = new Set(list.map(m=>m.id)), add = got.filter(m=>!have.has(m.id));
   if(add.length && !saveStats(list.concat(add))){ $("statsMsg").textContent = "Couldn't save: this phone's storage for the app is full."; return; }
   $("statsMsg").textContent = `Added ${add.length} new match${add.length===1?"":"es"}.` + (got.length-add.length ? ` ${got.length-add.length} already here, skipped.` : "");
@@ -963,7 +963,7 @@ function drawSummary(){
 
   /* footer */
   text([sideTxt().toUpperCase(), `${S.overs} OVER${S.overs===1?"":"S"}`, S.toss].filter(Boolean).join("  ·  "), PX+30, PY+PH+44, D("600",34), "rgba(255,255,255,.92)", "left", PW-360);
-  text("GULLY SCORER", PX+PW-30, PY+PH+42, D("700",30), "rgba(255,255,255,.85)", "right");
+  text("TURFCRICSCORE", PX+PW-30, PY+PH+42, D("700",30), "rgba(255,255,255,.85)", "right");
 
   c.toBlob(b=>{
     if(!b) return;
@@ -1440,7 +1440,7 @@ if("serviceWorker" in navigator && location.protocol==="https:"){
   const note = $("installNote"), show = ()=>{ if(!$("setup").hidden) note.hidden = false; };
   let prompt = null;
   addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); prompt = e;
-    $("installTxt").textContent = "Add Gully Scorer to your home screen to start a match in one tap.";
+    $("installTxt").textContent = "Add TurfCricScore to your home screen to start a match in one tap.";
     $("installSteps").hidden = true; $("installBtn").hidden = false; show(); });
   addEventListener("appinstalled", ()=>{ note.hidden = true; });
   $("installBtn").onclick = async ()=>{ if(!prompt) return; prompt.prompt(); const r = await prompt.userChoice.catch(()=>null); prompt = null; if(r && r.outcome==="accepted") note.hidden = true; };
@@ -1459,21 +1459,21 @@ if("serviceWorker" in navigator && location.protocol==="https:"){
   const ua = navigator.userAgent;
   const iOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints > 1);
   if(iOS){
-    if(/CriOS/.test(ua)) steps("Add Gully Scorer to your home screen:", [
+    if(/CriOS/.test(ua)) steps("Add TurfCricScore to your home screen:", [
       `Tap ${SHARE} <b>Share</b> at the top right, next to the address`,
       `Scroll down and tap ${ADD} <b>Add to Home Screen</b>`,
       `Tap <b>Add</b>`]);
-    else if(/FxiOS|EdgiOS/.test(ua)) steps("Add Gully Scorer to your home screen:", [
+    else if(/FxiOS|EdgiOS/.test(ua)) steps("Add TurfCricScore to your home screen:", [
       `Open the browser menu and tap ${SHARE} <b>Share</b>`,
       `Scroll down and tap ${ADD} <b>Add to Home Screen</b>`,
       `Tap <b>Add</b>`]);
-    else steps("Add Gully Scorer to your home screen:", [
+    else steps("Add TurfCricScore to your home screen:", [
       `Tap ${DOTS} at the bottom right (on older iPhones, skip to step 2)`,
       `Tap ${SHARE} <b>Share</b>`,
       `Scroll down and tap ${ADD} <b>Add to Home Screen</b>, keep <b>Open as Web App</b> on, then tap <b>Add</b>`]);
   } else if(/Android/.test(ua)){
     // Chrome usually offers its own install box; if it hasn't after a moment, show the menu steps
-    setTimeout(()=>{ if(!prompt && note.hidden) steps("Add Gully Scorer to your home screen:", [
+    setTimeout(()=>{ if(!prompt && note.hidden) steps("Add TurfCricScore to your home screen:", [
       `Tap ${VDOTS} at the top right of the browser`,
       `Tap <b>Install app</b> or <b>Add to Home screen</b>`,
       `Tap <b>Install</b> or <b>Add</b>`]); }, 3000);

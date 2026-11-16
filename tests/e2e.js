@@ -3,7 +3,8 @@
 //   npm i -D playwright && npx playwright install chromium   (once)
 //   python3 tools/build.py && node tests/e2e.js
 const { chromium } = require("playwright"); const fs = require("fs"); const path = require("path");
-const ROOT = path.join(__dirname, ".."), SITE = "https://samuvelmaniraj.github.io/gully-scorer/";
+const ROOT = path.join(__dirname, ".."), SITE = process.env.SITE || "https://turfcricscore.com/";
+const HOSTS = ["turfcricscore.com", "samuvelmaniraj.github.io"];
 let failed = 0;
 const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok ? "PASS" : "FAIL"}  ${label}${extra ? "  (" + extra + ")" : ""}`); };
 
@@ -13,7 +14,7 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
     const ctx = await browser.newContext();
     await ctx.route(/.*/, async route => {
       const req = route.request(), u = new URL(req.url());
-      if (u.host === "samuvelmaniraj.github.io") {
+      if (HOSTS.includes(u.host)) {
         const f = u.pathname.endsWith("/") ? "index.html" : u.pathname.split("/").pop();
         const type = { js: "application/javascript", png: "image/png", webmanifest: "application/manifest+json" }[f.split(".").pop()] || "text/html";
         return route.fulfill({ status: 200, contentType: type, body: fs.readFileSync(path.join(ROOT, f)) });

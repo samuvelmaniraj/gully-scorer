@@ -12,7 +12,8 @@ import base64, hashlib, pathlib, re
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "gully-scorer.html"
 OUT = ROOT / "index.html"
-SITE = "https://samuvelmaniraj.github.io/gully-scorer"
+# the app is served from its own domain; the old GitHub address keeps working during the move
+SITES = ["https://turfcricscore.com", "https://samuvelmaniraj.github.io/gully-scorer"]
 
 h = SRC.read_text()
 inline = re.findall(r"<script>(.*?)</script>", h, re.S)
@@ -22,10 +23,11 @@ sha = base64.b64encode(hashlib.sha256(js.encode()).digest()).decode()
 
 relay = re.search(r'const OWN_RELAY = "([^"]*)";', h).group(1)
 connect = f"{relay} {relay.replace('https://', 'wss://')}" if relay else "https://ntfy.sh wss://ntfy.sh"
-icons = " ".join(f"{SITE}/{f}" for f in ("icon-192.png", "apple-touch-icon.png"))
-csp = (f"default-src 'none'; script-src 'sha256-{sha}' {SITE}/qrcode.min.js; style-src 'unsafe-inline'; "
+at = lambda f: " ".join(f"{s}/{f}" for s in SITES)
+icons = " ".join(at(f) for f in ("icon-192.png", "apple-touch-icon.png"))
+csp = (f"default-src 'none'; script-src 'sha256-{sha}' {at('qrcode.min.js')}; style-src 'unsafe-inline'; "
        f"img-src data: blob: {icons}; connect-src {connect}; "
-       f"manifest-src {SITE}/manifest.webmanifest; worker-src {SITE}/sw.js; "
+       f"manifest-src {at('manifest.webmanifest')}; worker-src {at('sw.js')}; "
        f"base-uri 'none'; form-action 'none'")
 
 head = ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
@@ -39,7 +41,7 @@ head = ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<link rel="apple-touch-icon" href="apple-touch-icon.png">\n'
         '<meta name="apple-mobile-web-app-capable" content="yes">\n'
         '<meta name="mobile-web-app-capable" content="yes">\n'
-        '<meta name="apple-mobile-web-app-title" content="Gully Scorer">\n'
+        '<meta name="apple-mobile-web-app-title" content="TurfCricScore">\n'
         '<meta name="apple-mobile-web-app-status-bar-style" content="default">\n'
         '<meta name="theme-color" content="#F3F5F2" media="(prefers-color-scheme: light)">\n'
         '<meta name="theme-color" content="#0F1612" media="(prefers-color-scheme: dark)">\n'

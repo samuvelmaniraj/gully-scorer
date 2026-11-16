@@ -3,7 +3,7 @@
    Each match keeps only its latest message, deleted 12 hours after the last update. */
 import { DurableObject } from "cloudflare:workers";
 
-const ORIGINS = ["https://samuvelmaniraj.github.io"];
+const ORIGINS = ["https://turfcricscore.com", "https://samuvelmaniraj.github.io"];
 const TOPIC = /^gullyscorer-[a-z0-9]{10,24}$/;
 const MAX_BYTES = 16384, TTL_MS = 12 * 3600 * 1000, MIN_GAP_MS = 250;
 

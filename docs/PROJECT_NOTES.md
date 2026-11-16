@@ -1,4 +1,4 @@
-# Gully Scorer: project notes
+# TurfCricScore (formerly Gully Scorer): project notes
 
 Live scoring for gully and box cricket. One phone scores, everyone else watches live through a link or QR code. Free to run, no sign-up, privacy first.
 
@@ -8,7 +8,8 @@ Last updated: 16 Nov 2026
 
 | What | Where |
 |---|---|
-| Live site (start a match here) | https://samuvelmaniraj.github.io/gully-scorer/ |
+| Live site (start a match here) | https://turfcricscore.com (old address https://samuvelmaniraj.github.io/gully-scorer/ redirects there once the custom domain is on) |
+| Domain | `turfcricscore.com`, bought 17 Nov 2026 at Cloudflare Registrar, US$11.17 a year, auto-renew on |
 | Code | https://github.com/samuvelmaniraj/gully-scorer |
 | Live relay (Cloudflare) | https://gully-relay.s-samuvelmaniraj.workers.dev |
 | Cloudflare dashboard | dash.cloudflare.com → Workers & Pages → `gully-relay` |
@@ -35,6 +36,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - **Watch link:** `…/#watch-<id>.<key>.<publicKey>`. Anyone with it can read the score. Browsers never send the `#` part to any server, so the relay never sees the key.
 - **Handover link:** `…/#score-<id>.<key>.<publicKey>.<privateKey>`. Anyone with it can change the score; send it privately.
 - **Every update is signed.** Viewers ignore anything not signed by the scorer, so a watch link can't be used to fake a score.
+- **Addresses:** `tools/build.py` lists both site addresses in `SITES` for the security rules, and `worker/relay.js` accepts both in `ORIGINS`. Phones keep saved settings and stats per address, so moving address means Save backup on the old one and Merge a backup on the new one, and installing the app again.
 - **The relay** (`worker/relay.js`, a Cloudflare Worker with a Durable Object) keeps only the latest message per match. It pushes updates live over a WebSocket and deletes the match 12 hours after its last update. It only accepts requests from the Gully Scorer site, refuses anything that isn't a score message, and limits sending speed.
 - **Ordering:** each update carries a version number (`v`) that counts up, so phone clocks don't matter.
 - **Ball times:** each match stores its start time (`t0`) and each ball stores `t`, the seconds since the start (set when the ball is tapped). Kept small on purpose: a full 12-over match still uses well under the relay's 16 KB limit. Groundwork for video highlights (cut clips around 4s, 6s and wickets). Older balls without `t` still work. After a handover the new phone's clock is used, so a few seconds of drift is possible.
@@ -80,6 +82,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 | Signed updates | Viewers can't fake the score |
 | QR library copied into the repo, pinned with an integrity hash | Page runs only our own code; no outside script server |
 | Strict Content-Security-Policy in `index.html` | Blocks any script or connection not on the allow list |
+| Renamed to TurfCricScore, own domain turfcricscore.com | "Gully Scorer" / gullyscorer.com is an existing Play Store app (com.gullyscorer.app), and several "Gully Score" apps exist; .com chosen for a global audience. Hosting stays on GitHub Pages; the page's security rules and the relay accept both addresses during the move |
 | Settings saved on the phone only | Convenience without storing anything online |
 | Player stats on the phone, one record per match ID, backup and merge by file | Keeps the no-storage-online rule; works with several scorers without double counting. Shared stats on the relay is a possible later option |
 | Network-first service worker, own files only | Opens at the ground on weak signal, updates still arrive straight away, relay traffic untouched |
@@ -119,7 +122,6 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 **Future (big project):** camera with scorecard overlay, YouTube live, and automatic highlight clips from ball times. Step 1 done: every ball is timed (16 Nov 2026). Next steps when ready: scoreboard overlay link for streaming apps, then an Android app.
 
 **Optional, later**
-- Custom domain (about US$10 a year)
 - Reminder before the Cloudflare token expires (13 Nov 2027)
 
 ## Repo layout

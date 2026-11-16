@@ -1,4 +1,4 @@
-// Gully Scorer service worker.
+// TurfCricScore service worker.
 // Keeps a copy of the app's own files on the phone so it opens fast (or at all) on weak signal at the ground.
 // It only ever touches files from this site. Relay traffic and anything else pass straight through, untouched.
 // Updates: it always tries the network first, so a new version shows up on the next open when online.
