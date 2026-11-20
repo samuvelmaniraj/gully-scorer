@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-1wjqvpBdqpF288QuegrdxHnHF82J0XWs+557GVsixEc=' https://turfcricscore.com/qrcode.min.js https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://turfcricscore.com/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://turfcricscore.com/apple-touch-icon.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://turfcricscore.com/manifest.webmanifest https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://turfcricscore.com/sw.js https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2F+Dc2SU22pnuzxsQM/rJUcb96geyyQLRKaAbx3Xgrc=' https://turfcricscore.com/qrcode.min.js https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://turfcricscore.com/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://turfcricscore.com/apple-touch-icon.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://turfcricscore.com/manifest.webmanifest https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://turfcricscore.com/sw.js https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -248,17 +248,16 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
       <pre id="statsTxt" class="note" style="white-space:pre-wrap;margin:0" hidden></pre>
     </div>
     <details class="toss" id="statsGroup">
-      <summary id="gSum">Share stats with your group</summary>
+      <summary id="gSum">Share stats with your WhatsApp group</summary>
       <div class="tossIn">
         <div id="gNew">
-          <p class="note">Make one stats table for your whole group. Players open a link to see their stats any time, and every scorer's finished Full scorecard matches are added automatically. No accounts or logins. The stats are stored online but encrypted, so only people with your group's link can read them.</p>
-          <label for="gName">Group name<input id="gName" maxlength="30" placeholder="e.g. Sunday Turf Gang" autocomplete="off"></label>
-          <button type="button" class="btn small" id="gCreate">Create group</button>
+          <p class="note">Send one link to your WhatsApp group. Players tap it any time to see everyone's stats, and every finished Full scorecard match is added automatically. No accounts or logins. The stats are kept online but encrypted, so only people with the link can read them.</p>
+          <button type="button" class="btn small" id="gCreate">Share stats link on WhatsApp</button>
         </div>
         <div id="gIn" hidden>
           <p class="note" id="gRole"></p>
           <div class="btns">
-            <a class="btn small" id="gInvite" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Invite players</a>
+            <button type="button" class="btn small" id="gInvite">Share stats link</button>
             <button type="button" class="btn ghost small" id="gCopy">Copy players' link</button>
           </div>
           <div class="btns" id="gScorerBtns">
@@ -382,6 +381,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
     </div>
     <pre id="cardTxt" class="note" style="white-space:pre-wrap;margin:0" hidden></pre>
     <p class="note" id="statsSaved" hidden>Added to player stats on this phone.</p>
+    <button type="button" class="btn ghost" id="endStats" hidden>Share stats link on WhatsApp</button>
   </section>
 
   <details id="handCard" class="card sc" hidden>
@@ -635,6 +635,7 @@ function render(){
   if(!isViewer){
     syncStats();
     $("statsSaved").hidden = !(S.done && full());
+    $("endStats").hidden = !(S.done && full());
     const nd = need(i), locked = S.done || inn.done || !!nd || !!held || retiring;
     document.querySelectorAll("#pad button").forEach(b=>{ if(b.id!=="undoBtn") b.disabled = locked; });
     $("undoBtn").disabled = !canUndo();
@@ -1801,26 +1802,32 @@ async function groupSync(){
 addEventListener("online", ()=>{ if(GROUP && (isPend() || !$("statsCard").hidden)) groupSync(); });
 function renderGroupBox(){
   $("gNew").hidden = !!GROUP; $("gIn").hidden = !GROUP;
-  $("gSum").textContent = GROUP ? `Group: ${GROUP.name}` : "Share stats with your group";
+  $("gSum").textContent = GROUP ? "Shared stats link" : "Share stats with your WhatsApp group";
   if(!GROUP) return;
   $("gRole").textContent = GROUP.t
-    ? "This phone is a scorer for the group. Your finished Full scorecard matches are added automatically."
-    : "This phone can view the group's stats. To add matches from this phone, ask for the scorer link.";
+    ? "Your stats link is set up and this phone is a scorer: finished Full scorecard matches are added automatically. Tap Share stats link to post it in your WhatsApp group again."
+    : "This phone can view the shared stats. To add matches from this phone, ask the scorer for the scorer link.";
   $("gScorerBtns").hidden = $("gScorerNote").hidden = !GROUP.t;
-  const invite = `*${GROUP.name}* player stats on TurfCricScore 🏏\nRuns, wickets and averages for everyone, updated after every match:\n${groupLink()}`;
-  $("gInvite").href = "https://wa.me/?text=" + encodeURIComponent(invite);
   if(GROUP.t) $("gAddScorer").href = "https://wa.me/?text=" + encodeURIComponent(`Scorer link for *${GROUP.name}* on TurfCricScore. Keep it private: it lets you add matches to the group's stats.\n${scorerLink()}`);
 }
 $("statsSrc").addEventListener("click", e=>{ const b = e.target.closest("button[data-s]"); if(!b) return; statsSrc = b.dataset.s; renderStats(); });
-$("gCreate").onclick = async ()=>{
-  const name = $("gName").value.replace(/\s+/g," ").trim().slice(0,30) || "Our group";
-  GROUP = { id: randId(22), k: b64e(crypto.getRandomValues(new Uint8Array(16))), t: b64e(crypto.getRandomValues(new Uint8Array(32))), name, del:[] };
-  saveGroup(); setPend(true); statsSrc = "group";
-  writeCache({app:"gully-scorer-group", v:1, name, matches:loadStats(), del:[]}, 0);
-  $("statsGroup").open = true; renderStats(); gMsg("Creating your group…");
-  await groupSync();
-  if(!gOffline) gMsg("Group created. Tap Invite players to send the link to your WhatsApp group.");
-};
+/* one tap: the first time, quietly set up the online stats (no name, no "create" step), then open
+   WhatsApp so the user picks their existing group. Later taps reuse the same link. */
+function shareStatsLink(){
+  if(!GROUP){
+    GROUP = { id: randId(22), k: b64e(crypto.getRandomValues(new Uint8Array(16))), t: b64e(crypto.getRandomValues(new Uint8Array(32))), name: "Player stats", del:[] };
+    saveGroup(); setPend(true); statsSrc = "group";
+    writeCache({app:"gully-scorer-group", v:1, name: GROUP.name, matches: loadStats(), del:[]}, 0);
+  }
+  const text = `🏏 Player stats on TurfCricScore\nRuns, wickets and averages for everyone, updated after every match:\n${groupLink()}`;
+  window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener"); /* opened straight from the tap so phones allow it */
+  if(!$("statsCard").hidden) renderStats();
+  const tip = "Pick your WhatsApp group and send. It's the same link every time and always shows the latest stats.";
+  gMsg(tip); groupSync().then(()=>{ if(!gOffline) gMsg(tip); });
+}
+$("gInvite").onclick = shareStatsLink;
+$("gCreate").onclick = shareStatsLink;
+$("endStats").onclick = shareStatsLink;
 $("gCopy").onclick = ()=>{ gMsg(groupLink()); copyText(groupLink(), $("gCopy"), $("gMsg")); };
 $("gRefresh").onclick = ()=>groupSync();
 $("gLeave").onclick = ()=>armed($("gLeave"), "Tap again to leave", 4000, ()=>{

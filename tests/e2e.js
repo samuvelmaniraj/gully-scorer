@@ -186,14 +186,16 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
 
   // Group stats: one shared encrypted table; players' link views, scorer link adds
   const rec = (id, who, runs) => ({ id, at: Date.now(), teams: ["Reds", "Blues"], res: "Reds won", ov: 2, pl: [who], bat: [{ n: who, r: runs, b: 10, f: 1, s: 1, o: false }], bowl: [{ n: "Yan", l: 12, r: 20, w: 2 }] });
-  await D.click("#statsGroup summary"); await D.fill("#gName", "Test Gang"); await D.click("#gCreate"); await D.waitForTimeout(800);
+  await D.click("#statsGroup summary"); await D.click("#gCreate"); await D.waitForTimeout(800);
   const gid = Object.keys(groups)[0], G0 = groups[gid] || {};
-  check("scorer creates a group", G0.v === 1 && (await D.textContent("#gMsg")).includes("Group created"), await D.textContent("#gMsg"));
-  check("group stats are encrypted on the relay", G0.data.startsWith("gs1.") && !/Sam|Raj|Test Gang/.test(G0.data));
+  check("one tap sets up the stats link and opens WhatsApp", G0.v === 1 && (await D.textContent("#gMsg")).includes("Pick your WhatsApp group") && await D.evaluate(() => !!GROUP.t), await D.textContent("#gMsg"));
+  check("group stats are encrypted on the relay", G0.data.startsWith("gs1.") && !/Sam|Raj|Player stats/.test(G0.data));
+  await D.click("#gInvite"); await D.waitForTimeout(300);
+  check("sharing again keeps the same link", Object.keys(groups).length === 1);
   const viewLink = await D.evaluate(() => groupLink()), scoreLink = await D.evaluate(() => scorerLink());
   check("players' link has no scorer token", !viewLink.includes(await D.evaluate(() => GROUP.t)) && /#group-/.test(viewLink));
   const P = await phone(); await P.goto(viewLink); await P.waitForTimeout(1000);
-  check("player opens the group's stats", (await P.textContent("#statsInfo")).startsWith("Test Gang: 1 match") && /Sam|Raj|Ali/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
+  check("player opens the group's stats", (await P.textContent("#statsInfo")).startsWith("Player stats: 1 match") && /Sam|Raj|Ali/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
   check("link key is cleared from the address bar", await P.evaluate(() => location.hash === ""));
   check("player can't add or remove matches", await P.isHidden("#gScorerBtns") && !(await P.$("#statsList [data-del]")));
   const E = await phone(); await E.goto(scoreLink); await E.waitForTimeout(800);
@@ -202,16 +204,16 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   await E.evaluate(r => { saveStats([...loadStats(), r]); }, rec("eeeeee1", "Elan", 44));
   await Promise.all([D.evaluate(() => groupSync()), E.evaluate(() => groupSync())]); await D.waitForTimeout(3000);
   await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
-  check("two scorers saving at once both count", (await P.textContent("#statsInfo")).startsWith("Test Gang: 3 matches") && /Dinesh/.test(await P.textContent("#statsTable")) && /Elan/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
+  check("two scorers saving at once both count", (await P.textContent("#statsInfo")).startsWith("Player stats: 3 matches") && /Dinesh/.test(await P.textContent("#statsTable")) && /Elan/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
   await E.click("#statsMatches summary").catch(() => {});
   await E.click('#statsList [data-del="eeeeee1"]'); await E.click('#statsList [data-del="eeeeee1"]'); await E.waitForTimeout(1500);
   await D.evaluate(r => { saveStats([...loadStats(), r]); return groupSync(); }, rec("eeeeee1", "Elan", 44)); await D.waitForTimeout(500);
   await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
-  check("a removed match stays removed", (await P.textContent("#statsInfo")).startsWith("Test Gang: 2 matches") && !/Elan/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
+  check("a removed match stays removed", (await P.textContent("#statsInfo")).startsWith("Player stats: 2 matches") && !/Elan/.test(await P.textContent("#statsTable")), await P.textContent("#statsInfo"));
   const finished = await B.evaluate(() => JSON.parse(JSON.stringify(S)));
   await E.evaluate(st => { st.id = "eeefinish1"; S = clean(st); isViewer = false; syncStats(); }, finished); await E.waitForTimeout(1500);
   await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
-  check("a finished match on a scorer's phone goes to the group", (await P.textContent("#statsInfo")).startsWith("Test Gang: 3 matches"), await P.textContent("#statsInfo"));
+  check("a finished match on a scorer's phone goes to the group", (await P.textContent("#statsInfo")).startsWith("Player stats: 3 matches"), await P.textContent("#statsInfo"));
   if (process.env.SHOT) { await P.setViewportSize({ width: 390, height: 1500 }); await P.click("#statsGroup summary"); await P.locator("#statsCard").screenshot({ path: "/tmp/grp-player.png" });
     await D.setViewportSize({ width: 390, height: 1700 }); await D.evaluate(() => groupSync()); await D.waitForTimeout(600); await D.locator("#statsCard").screenshot({ path: "/tmp/grp-scorer.png" }); }
   const F = await phone(); await F.goto(scoreLink.replace(/\.[A-Za-z0-9_-]{43}$/, "." + "Z".repeat(43))); await F.waitForTimeout(400);

@@ -71,7 +71,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Matches saved list with Remove; Delete all stats (tap twice)
 
 **Group stats (shared, optional)**
-- Player stats → "Share stats with your group" → name → Create group. Two links: **players' link** `#group-<id>.<key>` (view only) and **scorer link** `#gscore-<id>.<key>.<token>` (can add and remove matches; send privately)
+- One tap, no "create group" step: **Share stats link on WhatsApp** (in Player stats, and on the match-end screen for Full matches). The first tap quietly sets up the online stats (named "Player stats") and opens WhatsApp so the user picks their existing WhatsApp group; later taps reuse the same link. Two links: **players' link** `#group-<id>.<key>` (view only) and **scorer link** `#gscore-<id>.<key>.<token>` (can add and remove matches; send privately)
 - No accounts. The group's stats are one file on the relay, encrypted with the key from the link (AES-GCM); the relay only sees ciphertext and a SHA-256 hash of the scorer token
 - Scorer phones add each finished Full match automatically; offline phones retry when back online or when Player stats is opened. Merge keeps the newest copy of each match by match ID, so nothing is counted twice
 - Two scorers saving at once: the relay accepts only the version the phone last saw (409 otherwise) and the phone merges again
