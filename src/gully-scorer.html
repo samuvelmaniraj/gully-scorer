@@ -113,6 +113,8 @@ td .how{display:block;font-size:12px;color:var(--muted)}
 .link code{font-size:13px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;color:var(--ink);user-select:all}
 .note{font-size:13px;color:var(--muted);margin:0}
 .banner{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--turf-soft);color:var(--turf)}
+.sumrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row2{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
 .comm{gap:10px}
 .commHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .seg2{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
@@ -297,6 +299,24 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
     <div id="breakBox" class="btns" hidden>
       <button class="btn" id="nextInn">Start 2nd innings</button>
     </div>
+    <details class="toss" id="editBox">
+      <summary>Change overs or players</summary>
+      <div class="tossIn">
+        <div class="row2">
+          <label for="edOv">Overs per side<input id="edOv" type="number" inputmode="numeric" min="1" max="50"></label>
+          <button type="button" class="btn ghost small" id="edOvBtn" style="align-self:end">Save overs</button>
+        </div>
+        <div id="edQuick" class="row2">
+          <label for="edPa">Players a side<input id="edPa" type="number" inputmode="numeric" min="2" max="15"></label>
+          <button type="button" class="btn ghost small" id="edPaBtn" style="align-self:end">Save players</button>
+        </div>
+        <div id="edFull">
+          <label for="edName">New player's name<input id="edName" maxlength="20" autocomplete="off" placeholder="e.g. Karthik"></label>
+          <div class="btns" id="edTeams"></div>
+        </div>
+        <p class="note" id="edMsg" aria-live="polite">For players who join late, or if you agree to play more or fewer overs. Viewers see the change straight away.</p>
+      </div>
+    </details>
   </section>
 
   <details id="scWrap" class="card sc" hidden>
@@ -323,9 +343,17 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
   <section id="finalCard" class="card" hidden>
     <h2>Match summary</h2>
     <img id="sumImg" class="sumimg" alt="Match summary graphic" width="1920" height="1080">
+    <div class="sumrow" id="innImgs" hidden>
+      <img id="innImg0" class="sumimg" alt="1st innings scorecard" width="1920" height="1080">
+      <img id="innImg1" class="sumimg" alt="2nd innings scorecard" width="1920" height="1080">
+    </div>
     <div class="btns">
       <button class="btn" id="shareImg">Share summary image</button>
       <a class="btn ghost" id="saveImg" download="match-summary.png" style="text-decoration:none;text-align:center" hidden>Save image</a>
+    </div>
+    <div class="btns" id="saveInn" hidden>
+      <a class="btn ghost small" id="saveInn0" download="scorecard-1st-innings.png" style="text-decoration:none;text-align:center">Save 1st innings</a>
+      <a class="btn ghost small" id="saveInn1" download="scorecard-2nd-innings.png" style="text-decoration:none;text-align:center">Save 2nd innings</a>
     </div>
     <p class="note" id="imgNote">Choose WhatsApp in the share menu. The summary text is added under the image, so it still reads if the image doesn't load.</p>
     <div class="btns">
@@ -582,7 +610,7 @@ function render(){
   renderCard();
   renderComm();
   $("finalCard").hidden = !S.done;
-  if(S.done){ const t = scoreText(); $("cardTxt").textContent = t; $("waCard").href = "https://wa.me/?text=" + encodeURIComponent(t); if(sumFor !== S.v){ sumFor = S.v; drawSummary(); } }
+  if(S.done){ const t = scoreText(); $("cardTxt").textContent = t; $("waCard").href = "https://wa.me/?text=" + encodeURIComponent(t); if(sumFor !== S.v){ sumFor = S.v; drawSummary(); if(full()){ drawInnings(0); drawInnings(1); } } $("innImgs").hidden = !full(); $("shareImg").textContent = full() ? "Share summary + scorecards" : "Share summary image"; }
 
   if(!isViewer){
     syncStats();
@@ -591,6 +619,7 @@ function render(){
     document.querySelectorAll("#pad button").forEach(b=>{ if(b.id!=="undoBtn") b.disabled = locked; });
     $("undoBtn").disabled = !canUndo();
     $("breakBox").hidden = !(i===0 && inn.done);
+    renderEdit();
     $("fullTools").hidden = !full() || inn.done || S.done || !!nd;
     $("swapBtn").hidden = !!S.oneSide || aloneNow(i);
     $("chgBowl").disabled = inn.bw==null;
@@ -906,6 +935,11 @@ function battedList(inn){
   [inn.str, inn.non].forEach(p=>{ if(p!=null && !out.includes(p)) out.push(p); });
   return out;
 }
+function howOut(inn, i, p, f){
+  f = f || batFig(inn, p);
+  const rt = lastRet(inn, p), atCrease = !inn.done && (p===inn.str||p===inn.non);
+  return f.out ? (f.out.wt==="r" ? "run out" : f.out.wt==="ro" ? "retired out" : "b " + pname(1-i, f.out.bw)) : atCrease ? "batting" : rt && rt.k==="h" ? "retired hurt" : "not out";
+}
 function bowledList(inn){ const out = []; inn.balls.forEach(b=>{ if(b.bw!=null && !out.includes(b.bw)) out.push(b.bw); }); return out; }
 function drawSummary(){
   const W = 1920, H = 1080, ROWS = full() ? 4 : 1, ROW = full() ? 55 : 100;
@@ -1012,15 +1046,104 @@ function drawSummary(){
     $("sumImg").src = sumUrl; $("saveImg").href = sumUrl;
   }, "image/png");
 }
+/* one image per innings with the full scorecard (Full mode only) */
+let innBlobs = [null, null], innUrls = [null, null];
+function drawInnings(i){
+  const inn = S.innings[i], st = stats(inn), W = 1920, H = 1080;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  const D = (w,s)=>`${w} ${s}px "Roboto Condensed","Arial Narrow","Helvetica Neue",system-ui,sans-serif`;
+  const fit = (t, max)=>{ t = String(t); if(x.measureText(t).width <= max) return t; while(t.length>1 && x.measureText(t+"…").width > max) t = t.slice(0,-1); return t + "…"; };
+  const rrect = (X,Y,w,h,r)=>{ x.beginPath(); if(x.roundRect) x.roundRect(X,Y,w,h,r); else x.rect(X,Y,w,h); };
+  const lin = (y0,y1,stops)=>{ const g = x.createLinearGradient(0,y0,0,y1); stops.forEach(([o,col])=>g.addColorStop(o,col)); return g; };
+  const linX = (x0,x1,stops)=>{ const g = x.createLinearGradient(x0,0,x1,0); stops.forEach(([o,col])=>g.addColorStop(o,col)); return g; };
+  const text = (t, X, Y, font, color, align, max)=>{ x.font = font; x.fillStyle = color; x.textAlign = align || "left"; x.fillText(max ? fit(t, max) : String(t), X, Y); x.textAlign = "left"; };
+  x.textBaseline = "middle";
+  const th = [{band:["#0A2E78","#1D63CF","#0A2E78"], rowA:"#14479E", rowB:"#1A55B8"},{band:["#0B4A22","#2A8F45","#0B4A22"], rowA:"#17602D", rowB:"#1C6F35"}][i];
+  /* same night-stadium backdrop as the summary */
+  x.fillStyle = lin(0, H, [[0,"#1B1236"],[0.28,"#5A1E3A"],[0.5,"#1A1A2A"],[1,"#0A1A10"]]); x.fillRect(0,0,W,H);
+  const field = x.createRadialGradient(W/2, H*1.05, 60, W/2, H*1.05, W*0.65); field.addColorStop(0,"#3FAE4A"); field.addColorStop(1,"#14581F");
+  x.fillStyle = field; x.beginPath(); x.ellipse(W/2, H*1.08, W*0.66, H*0.5, 0, Math.PI, 2*Math.PI); x.fill();
+  const PX = 90, PY = 60, PW = W - 2*PX, PH = H - 2*PY - 50;
+  x.save(); x.shadowColor = "rgba(0,0,0,.55)"; x.shadowBlur = 40; x.shadowOffsetY = 12;
+  x.fillStyle = lin(PY, PY+PH, [[0,"#F7F7F7"],[0.5,"#9EA3A8"],[1,"#E9EBED"]]); rrect(PX, PY, PW, PH, 40); x.fill(); x.restore();
+  x.fillStyle = "#1B1F24"; rrect(PX+10, PY+10, PW-20, PH-20, 32); x.fill();
+  const IX = PX + 24, IW = PW - 48; let y = PY + 24;
+  /* header */
+  x.fillStyle = lin(y, y+76, [[0,"#FFFFFF"],[0.55,"#E4E6E9"],[1,"#B9BEC4"]]); rrect(IX, y, IW, 76, [22,22,0,0]); x.fill();
+  text(`${i===0?"1ST":"2ND"} INNINGS SCORECARD`, W/2, y+40, D("700",54), "#111111", "center");
+  y += 76;
+  /* team band */
+  x.fillStyle = linX(IX, IX+IW, [[0,th.band[0]],[0.5,th.band[1]],[1,th.band[2]]]); x.fillRect(IX, y, IW, 78);
+  const score = `${st.runs}-${st.wk}`, ovl = `${oversWord(st.legal)}/${S.overs} Overs`;
+  x.font = D("700",60); const sW = x.measureText(score).width;
+  text(score, IX+IW-30, y+41, D("700",60), "#FFFFFF", "right");
+  text(ovl, IX+IW-30-sW-30, y+41, D("400",42), "#FFFFFF", "right");
+  x.font = D("400",42); const oW = x.measureText(ovl).width;
+  text(S.teams[i].toUpperCase(), IX+30, y+41, D("700",60), "#FFFFFF", "left", IW-sW-oW-120);
+  y += 78 + 14;
+  /* two tables: batting (left) and bowling (right) */
+  const bat = battedList(inn), bowl = bowledList(inn);
+  const foot = 70, avail = PY + PH - 24 - foot - y - 50;
+  const ROW = Math.max(34, Math.min(62, Math.floor(avail / Math.max(bat.length + 1, bowl.length, 1))));
+  const fs = Math.min(34, Math.round(ROW*0.56)), small = Math.round(fs*0.72);
+  const LW = Math.round(IW*0.6), RX = IX + LW + 16, RW = IW - LW - 16;
+  const head = (X, w, cols) => { x.fillStyle = "#2B3138"; x.fillRect(X, y, w, 46); cols.forEach(([t,cx,al])=>text(t, cx, y+24, D("700",26), "rgba(255,255,255,.75)", al||"center")); };
+  const bc = { r: IX+LW-370, b: IX+LW-290, f: IX+LW-210, s: IX+LW-140, sr: IX+LW-60 };
+  head(IX, LW, [["BATTER", IX+24, "left"], ["R", bc.r], ["B", bc.b], ["4s", bc.f], ["6s", bc.s], ["SR", bc.sr]]);
+  const oc = { o: RX+RW-300, r: RX+RW-210, w: RX+RW-130, e: RX+RW-50 };
+  head(RX, RW, [["BOWLER", RX+24, "left"], ["O", oc.o], ["R", oc.r], ["W", oc.w], ["ECON", oc.e]]);
+  const ty = y + 50;
+  bat.forEach((p, k)=>{
+    const ry = ty + k*ROW, f = batFig(inn, p), how = howOut(inn, i, p, f), notOut = !f.out;
+    x.fillStyle = k%2 ? th.rowB : th.rowA; x.fillRect(IX, ry, LW, ROW-2);
+    x.font = D("700",fs); const nm = fit(pname(i,p).toUpperCase() + (notOut && how!=="retired hurt" ? "*" : ""), 300);
+    text(nm, IX+24, ry+ROW/2, D("700",fs), "#FFFFFF", "left");
+    x.font = D("700",fs); const nW = x.measureText(nm).width;
+    text(how, IX+24+nW+18, ry+ROW/2+2, D("400",small), "rgba(255,255,255,.75)", "left", bc.r-60-(IX+24+nW+18));
+    text(f.r, bc.r, ry+ROW/2, D("700",fs), "#FFFFFF", "center");
+    [[f.b,bc.b],[f.f,bc.f],[f.s,bc.s],[f.b ? Math.round(f.r*100/f.b) : "–", bc.sr]].forEach(([v,cx])=>text(v, cx, ry+ROW/2, D("500",fs), "rgba(255,255,255,.9)", "center"));
+  });
+  const ey = ty + bat.length*ROW;
+  x.fillStyle = "#2B3138"; x.fillRect(IX, ey, LW, ROW-2);
+  text("EXTRAS", IX+24, ey+ROW/2, D("700",fs), "#FFFFFF", "left");
+  text(`${st.wd+st.nb}  (wd ${st.wd}, nb ${st.nb})`, IX+LW-24, ey+ROW/2, D("500",fs), "rgba(255,255,255,.9)", "right");
+  bowl.forEach((p, k)=>{
+    const ry = ty + k*ROW, f = bowlFig(inn, p);
+    x.fillStyle = k%2 ? th.rowB : th.rowA; x.fillRect(RX, ry, RW, ROW-2);
+    text(pname(1-i,p).toUpperCase(), RX+24, ry+ROW/2, D("700",fs), "#FFFFFF", "left", oc.o-60-(RX+24));
+    [[oversTxt(f.legal),oc.o],[f.r,oc.r]].forEach(([v,cx])=>text(v, cx, ry+ROW/2, D("500",fs), "rgba(255,255,255,.9)", "center"));
+    text(f.w, oc.w, ry+ROW/2, D("700",fs), "#FFFFFF", "center");
+    text(f.legal ? (f.r/(f.legal/6)).toFixed(1) : "–", oc.e, ry+ROW/2, D("500",fs), "rgba(255,255,255,.9)", "center");
+  });
+  /* bottom bar: result after the 2nd innings, the target after the 1st */
+  const by = PY + PH - 24 - foot;
+  x.fillStyle = lin(by, by+foot, [[0,"#FFFFFF"],[1,"#D5D9DE"]]); rrect(IX, by, IW, foot, [0,0,22,22]); x.fill();
+  const bar = i===1 || S.done ? (i===1 ? resultTxt() : `${S.teams[1]} needed ${st.runs+1} to win`) : "";
+  text(bar.toUpperCase(), W/2, by+foot/2+2, D("700",44), "#111111", "center", IW-80);
+  text(`${S.teams[0]} v ${S.teams[1]}`.toUpperCase(), PX+20, PY+PH+28, D("600",30), "rgba(255,255,255,.92)", "left", PW-360);
+  text("TURFCRICSCORE", PX+PW-20, PY+PH+28, D("700",28), "rgba(255,255,255,.85)", "right");
+  c.toBlob(b=>{
+    if(!b) return;
+    innBlobs[i] = b;
+    if(innUrls[i]) URL.revokeObjectURL(innUrls[i]);
+    innUrls[i] = URL.createObjectURL(b);
+    $("innImg"+i).src = innUrls[i]; $("saveInn"+i).href = innUrls[i];
+  }, "image/png");
+}
 $("shareImg").onclick = async ()=>{
   if(!sumBlob) return;
-  const file = new File([sumBlob], "match-summary.png", {type:"image/png"}), text = scoreText();
-  const withText = {files:[file], text}, onlyFile = {files:[file]};
+  const files = [new File([sumBlob], "match-summary.png", {type:"image/png"})];
+  if(full()) innBlobs.forEach((b,i)=>{ if(b) files.push(new File([b], `scorecard-${i===0?"1st":"2nd"}-innings.png`, {type:"image/png"})); });
+  const file = files[0], text = scoreText();
+  let withText = {files, text}, onlyFile = {files};
+  if(navigator.canShare && files.length>1 && !navigator.canShare(onlyFile)){ withText = {files:[file], text}; onlyFile = {files:[file]}; }
   if(navigator.canShare && (navigator.canShare(withText) || navigator.canShare(onlyFile))){
     try{ await navigator.share(navigator.canShare(withText) ? withText : onlyFile); }catch(e){}
   } else {
     $("saveImg").hidden = false;
-    $("imgNote").textContent = "This browser can't share images directly. Tap Save image, or long-press the image, then send it on WhatsApp.";
+    $("saveInn").hidden = !full();
+    $("imgNote").textContent = "This browser can't share images directly. Tap Save image" + (full() ? " and the innings buttons" : "") + ", or long-press an image, then send it on WhatsApp.";
   }
 };
 
@@ -1036,8 +1159,7 @@ function renderCard(){
     h += `<div class="tw"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th></tr></thead><tbody>`;
     batted.forEach(p=>{
       const f = batFig(inn,p);
-      const rt = lastRet(inn, p), atCrease = !inn.done && (p===inn.str||p===inn.non);
-      const how = f.out ? (f.out.wt==="r" ? "run out" : f.out.wt==="ro" ? "retired out" : "b " + pname(1-i, f.out.bw)) : atCrease ? "batting" : rt && rt.k==="h" ? "retired hurt" : "not out";
+      const how = howOut(inn, i, p, f);
       h += `<tr><td>${esc(pname(i,p))}<span class="how">${esc(how)}</span></td><td>${f.r}</td><td>${f.b}</td><td>${f.f}</td><td>${f.s}</td></tr>`;
     });
     h += `<tr><td>Extras</td><td colspan="4">${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})</td></tr></tbody></table></div>`;
@@ -1144,6 +1266,50 @@ function addBall(r){
 }
 function finishWicket(out, wt){
   if(freeHitNext(S.innings[S.cur])) wt = "r"; const b = held; held = null; b.out = out; b.wt = wt; push(b); }
+/* ---------- change overs or add players during a match ---------- */
+function renderEdit(){
+  const box = $("editBox"); box.hidden = !!held || retiring;
+  if(document.activeElement !== $("edOv")) $("edOv").value = S.overs;
+  $("edQuick").hidden = full(); $("edFull").hidden = !full();
+  if(!full() && document.activeElement !== $("edPa")) $("edPa").value = S.size || (S.lastMan ? S.wickets : S.wickets + 1);
+  if(full()){
+    const t = $("edTeams"), want = S.teams.map((n,k)=>`Add to ${n} (${S.players[k].length})`).join("|");
+    if(t.dataset.k !== want){ t.dataset.k = want; t.innerHTML = "";
+      S.teams.forEach((n,k)=>{ const b = document.createElement("button"); b.type="button"; b.className="btn ghost small"; b.textContent = `Add to ${n} (${S.players[k].length})`; b.onclick = ()=>addPlayer(k); t.appendChild(b); }); }
+  }
+}
+/* after a change, an innings that ended on overs or wickets may be open again, or may now be over */
+function recheck(){
+  const i = S.cur, inn = S.innings[i];
+  if(inn.done && !inningsOver(i) && !(i===0 && S.innings[1].balls.length)){ inn.done = false; S.done = false; }
+  if(!inn.done && inningsOver(i)){ inn.done = true; if(i===1) S.done = true; }
+  if(full() && !inn.done && inn.str==null && inn.non!=null && S.lastMan && freeBat(i)>0){ inn.str = inn.non; inn.non = null; }
+}
+const edMsg = t => { $("edMsg").textContent = t; };
+$("edOvBtn").onclick = ()=>{
+  const v = Math.floor(+$("edOv").value), used = Math.ceil(stats(S.innings[S.cur]).legal/6);
+  if(!(v>=1 && v<=50)){ edMsg("Overs must be between 1 and 50."); return; }
+  if(v < used){ edMsg(`This innings has already reached ${used} over${used===1?"":"s"}, so it can't be less.`); return; }
+  if(v===S.overs){ edMsg("That's the same number of overs."); return; }
+  const was = S.overs; S.overs = v; recheck(); commit();
+  edMsg(`Overs changed from ${was} to ${v} a side.` + (S.cur===1 && S.innings[0].done ? " The target stays the same." : ""));
+};
+$("edPaBtn").onclick = ()=>{
+  const v = Math.floor(+$("edPa").value), out = stats(S.innings[S.cur]).wk;
+  if(!(v>=2 && v<=15)){ edMsg("Players a side must be between 2 and 15."); return; }
+  const wk = S.lastMan ? v : v-1;
+  if(wk < out){ edMsg(`${out} wickets have already fallen, so there must be at least ${S.lastMan ? out : out+1} players.`); return; }
+  S.size = v; S.wickets = wk; recheck(); commit(); edMsg(`Now ${v} players a side.`);
+};
+function addPlayer(k){
+  const name = $("edName").value.replace(/\s+/g," ").trim().slice(0,20);
+  if(!name){ edMsg("Type the new player's name first."); $("edName").focus(); return; }
+  if(S.players[k].length >= 15){ edMsg("A team can have at most 15 players."); return; }
+  if(S.players[k].some(p=>p.toLowerCase()===name.toLowerCase())){ edMsg(`${S.teams[k]} already has a player called ${name}.`); return; }
+  S.players[k].push(name); $("edName").value = "";
+  recheck(); commit(); edMsg(`${name} added to ${S.teams[k]}. They can bat or bowl from now on.`);
+}
+
 let retiring = false;
 function doRetire(p, k){
   const i = S.cur, inn = S.innings[i]; retiring = false;

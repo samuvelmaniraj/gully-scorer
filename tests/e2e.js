@@ -154,6 +154,34 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   await tap(Q, "#retBtn"); await Q.click('#pick button:has-text("Retired out")'); await Q.waitForTimeout(150);
   check("Quick score: retired out adds a wicket", (await sc(Q)) === "0/1", await sc(Q));
 
+  // Change overs and add players during a match
+  const M = await phone(); await M.goto(SITE); await M.evaluate(() => localStorage.clear()); await M.goto(SITE);
+  await M.check("#mFull"); await M.fill("#p1", "Ann\nBob"); await M.fill("#p2", "Xi\nYan"); await M.fill("#ov", "1");
+  await M.click("button[type=submit]"); await M.waitForTimeout(300); await pick(M);
+  await M.click("#editBox summary");
+  await M.fill("#edName", "Karthik"); await M.click('#edTeams button >> nth=0'); await M.waitForTimeout(150);
+  check("late player joins the batting team", await M.evaluate(() => S.players[0].includes("Karthik") && wkts(0) === 2));
+  await tap(M, "#wkBtn"); await tap(M, '[data-r="0"]'); await M.click("#pick .btn >> nth=0"); await M.waitForTimeout(150);
+  const late = await M.$$eval("#selBat option", o => o.map(x => x.textContent));
+  check("late player can come in to bat", late.includes("Karthik"), late.join(", "));
+  await M.selectOption("#selBat", { label: "Karthik" }); await tap(M, "#pick .btn");
+  for (let k = 0; k < 5; k++) await tap(M, '[data-r="1"]');
+  check("innings ends after 1 over", await M.evaluate(() => S.innings[0].done));
+  await M.fill("#edOv", "2"); await M.click("#edOvBtn"); await M.waitForTimeout(150);
+  check("adding overs reopens the innings", await M.evaluate(() => S.overs === 2 && !S.innings[0].done) && (await M.textContent("#edMsg")).includes("from 1 to 2"));
+  await M.fill("#edOv", "0"); await M.click("#edOvBtn");
+  check("overs can't go below what's been bowled", (await M.textContent("#edMsg")).includes("between 1 and 50"));
+  await M.fill("#edOv", "1"); await M.click("#edOvBtn"); await M.waitForTimeout(150);
+  check("cutting overs back ends the innings", await M.evaluate(() => S.overs === 1 && S.innings[0].done));
+  const Q2 = await phone(); await Q2.goto(SITE); await Q2.evaluate(() => localStorage.clear()); await Q2.goto(SITE);
+  await Q2.fill("#pa", "2"); await Q2.click("button[type=submit]"); await Q2.waitForTimeout(300);
+  await tap(Q2, "#wkBtn"); await tap(Q2, '[data-r="0"]');
+  check("Quick: all out with 2 a side", await Q2.evaluate(() => S.innings[0].done));
+  await Q2.click("#editBox summary"); await Q2.fill("#edPa", "3"); await Q2.click("#edPaBtn"); await Q2.waitForTimeout(150);
+  check("Quick: an extra player reopens the innings", await Q2.evaluate(() => S.size === 3 && S.wickets === 2 && !S.innings[0].done));
+  // Scorecard images for each innings (Full)
+  check("two innings scorecard images are made", await B.evaluate(() => !!innBlobs[0] && !!innBlobs[1] && innBlobs[0].size > 20000) && (await B.textContent("#shareImg")).includes("scorecards"));
+
   // Group stats: one shared encrypted table; players' link views, scorer link adds
   const rec = (id, who, runs) => ({ id, at: Date.now(), teams: ["Reds", "Blues"], res: "Reds won", ov: 2, pl: [who], bat: [{ n: who, r: runs, b: 10, f: 1, s: 1, o: false }], bowl: [{ n: "Yan", l: 12, r: 20, w: 2 }] });
   await D.click("#statsGroup summary"); await D.fill("#gName", "Test Gang"); await D.click("#gCreate"); await D.waitForTimeout(800);

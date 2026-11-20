@@ -51,6 +51,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Strike rotation; One-side batting (single batter); Last man bats alone
 - Toggles: wide gives 1 run, no-ball gives 1 run, one-tap wide and wicket (off by default), free hit (on by default)
 - Coin toss with bat or bowl choice; Swap batting order
+- Change overs or players (collapsed section under the pad, scorer only, any time incl. after the match): change overs per side (not below overs already bowled in this innings; target stays the same), add a late player to either team in Full (max 15, no duplicate names), change Players a side in Quick. An innings that ended on overs or all out reopens if the change allows more play (not the 1st innings once the 2nd has started); cutting overs can end it. Not covered by Undo: change it back instead
 - Retire batter (button under the pad): **Retired hurt** (not a wicket; player listed as "(retired hurt)" and can bat again) or **Retired out** (counts as a wicket; can't bat again). Quick score offers Retired out only. Stored as `inn.ret` entries `{p, k:"h"|"o", at, pre}` beside the balls (not a ball), with their own Undo; shown in commentary, scorecard ("retired hurt" / "retired out") and stats (retired out = dismissed). If the last batter retires hurt with nobody to come in, the partner bats alone when Last man bats alone is on, otherwise the innings ends.
 
 **Sharing**
@@ -58,6 +59,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Scorer handover by QR, link or WhatsApp; it also passes the match settings
 - Viewers keep the last score if the scorer goes away, and catch up when it's back
 - Ball-by-ball commentary for viewers (both modes): latest first, grouped by over with an end-of-over summary (runs, score, bowler in Full, runs needed in a chase), free hits, milestones (batter 25/50, team 50s), innings and result lines, switch between innings, last 3 overs with "Show all". Built from the balls already in each update, so no format change. Not shown on the scorer's phone.
+- Match end (Full mode): two more images, a full scorecard per innings (every batter with how out, R, B, 4s, 6s, SR; extras; every bowler with O, R, W, Econ; target or result bar). "Share summary + scorecards" shares all three at once (falls back to the summary alone if a phone can't share several files); Save buttons for each when sharing isn't supported
 - Match end: TV-style summary image (1920×1080) with team bars, top 4 batters and bowlers (Full) or fours/sixes/extras/run rate (Quick), overs played / overs a side, team size, toss and result
 - WhatsApp text table sent with the image; Send as text and Copy text
 
