@@ -2,7 +2,7 @@
 
 Live scoring for gully and box cricket. One phone scores, everyone else watches live through a link or QR code. Free to run, no sign-up, privacy first.
 
-Last updated: 20 Nov 2026
+Last updated: 21 Nov 2026
 
 ## Links
 
@@ -74,6 +74,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - One tap, no "create group" step: **Share stats link on WhatsApp** (in Player stats, and on the match-end screen for Full matches). The first tap quietly sets up the online stats (named "Player stats") and opens WhatsApp so the user picks their existing WhatsApp group; later taps reuse the same link. Two links: **players' link** `#group-<id>.<key>` (view only) and **scorer link** `#gscore-<id>.<key>.<token>` (can add and remove matches; send privately)
 - No accounts. The group's stats are one file on the relay, encrypted with the key from the link (AES-GCM); the relay only sees ciphertext and a SHA-256 hash of the scorer token
 - Scorer phones add each finished Full match automatically; offline phones retry when back online or when Player stats is opened. Merge keeps the newest copy of each match by match ID, so nothing is counted twice
+- Handover carries the stats link: when the phone has a scorer link, the handover link gets an optional suffix `.<groupId>.<key>.<token>` after the usual `#score-…` parts, so the new scorer joins the same online stats automatically and its finished matches are added. Old handover links without the suffix still work. Handover QR is drawn larger when the suffix is present
 - Two scorers saving at once: the relay accepts only the version the phone last saw (409 otherwise) and the phone merges again
 - Removing a match on a scorer phone removes it for the whole group (kept as a removed ID so other phones don't add it back)
 - The link's key is cleared from the address bar after opening. "Leave group on this phone" forgets the group on that phone only

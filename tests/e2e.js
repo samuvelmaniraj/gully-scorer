@@ -216,6 +216,12 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   check("a finished match on a scorer's phone goes to the group", (await P.textContent("#statsInfo")).startsWith("Player stats: 3 matches"), await P.textContent("#statsInfo"));
   if (process.env.SHOT) { await P.setViewportSize({ width: 390, height: 1500 }); await P.click("#statsGroup summary"); await P.locator("#statsCard").screenshot({ path: "/tmp/grp-player.png" });
     await D.setViewportSize({ width: 390, height: 1700 }); await D.evaluate(() => groupSync()); await D.waitForTimeout(600); await D.locator("#statsCard").screenshot({ path: "/tmp/grp-scorer.png" }); }
+  // Handover carries the online stats link, so the new scorer adds to the same stats
+  await D.goto(SITE); await D.click("button[type=submit]"); await D.waitForTimeout(400);
+  const hl = await D.evaluate(() => handLink());
+  check("handover link includes the stats link", hl.includes(await D.evaluate(() => GROUP.id)));
+  const H = await phone(); await H.goto(hl); await H.waitForTimeout(1500);
+  check("new scorer joins the online stats automatically", (await H.evaluate(() => GROUP && GROUP.t)) === (await D.evaluate(() => GROUP.t)) && await H.evaluate(() => !isViewer));
   const F = await phone(); await F.goto(scoreLink.replace(/\.[A-Za-z0-9_-]{43}$/, "." + "Z".repeat(43))); await F.waitForTimeout(400);
   await F.evaluate(r => { saveStats([r]); return groupSync(); }, rec("ffffff1", "Faker", 99)); await F.waitForTimeout(300);
   check("a fake scorer link can't add matches", (await F.textContent("#gMsg")).includes("didn't accept") && groups[gid].v === (await P.evaluate(() => readCache().v)));

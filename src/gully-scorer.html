@@ -1499,7 +1499,9 @@ $("endBtn").onclick = ()=>{
 
 const baseUrl = () => location.href.split("#")[0];
 const watchLink = () => `${baseUrl()}#watch-${S.id}.${K}.${SK.x}.${SK.y}`;
-const handLink = () => `${baseUrl()}#score-${S.id}.${K}.${SK.x}.${SK.y}.${SK.d}`;
+/* the handover link also carries the online stats link (if this phone has one), so the new scorer's
+   finished matches go to the same online stats. It's sent privately, like the rest of this link. */
+const handLink = () => `${baseUrl()}#score-${S.id}.${K}.${SK.x}.${SK.y}.${SK.d}` + (GROUP && GROUP.t ? `.${GROUP.id}.${GROUP.k}.${GROUP.t}` : "");
 function startScorer(fresh){
   $("setup").hidden = true; $("viewerNote").hidden = true;
   ["boardWrap","scorer","shareCard","endCard","handCard"].forEach(id=>$(id).hidden=false);
@@ -1508,15 +1510,20 @@ function startScorer(fresh){
   $("waBtn").href = "https://wa.me/?text=" + encodeURIComponent(`Live score: ${S.teams[0]} vs ${S.teams[1]} ${link}`);
   $("qr").innerHTML = "";
   try{ new QRCode($("qr"), {text:link, width:132, height:132, colorDark:"#000000", colorLight:"#ffffff"}); }catch(e){ $("qr").hidden = true; }
-  $("handTxt").textContent = handLink(); $("qr2").innerHTML = ""; $("handCard").open = false;
-  $("waHand").href = "https://wa.me/?text=" + encodeURIComponent(`Take over scoring for ${S.teams[0]} vs ${S.teams[1]}. Open this link on your phone. Please don't forward it, anyone with it can change the score: ${handLink()}`);
+  refreshHand(); $("handCard").open = false;
   keepAwake();
   if(fresh) commit(); else { render(); broadcast(); }
   watchTakeover();
 }
+function refreshHand(){
+  $("handTxt").textContent = handLink(); $("qr2").innerHTML = "";
+  $("waHand").href = "https://wa.me/?text=" + encodeURIComponent(`Take over scoring for ${S.teams[0]} vs ${S.teams[1]}. Open this link on your phone. Please don't forward it, anyone with it can change the score: ${handLink()}`);
+}
 $("handCard").addEventListener("toggle",()=>{
-  if(!$("handCard").open || $("qr2").childNodes.length) return;
-  try{ new QRCode($("qr2"), {text:handLink(), width:132, height:132, colorDark:"#000000", colorLight:"#ffffff", correctLevel:QRCode.CorrectLevel.L}); }catch(e){ $("qr2").hidden = true; }
+  if(!$("handCard").open) return;
+  refreshHand(); /* picks up an online stats link set up after the match started */
+  const big = !!(GROUP && GROUP.t), w = big ? 180 : 132;
+  try{ new QRCode($("qr2"), {text:handLink(), width:w, height:w, colorDark:"#000000", colorLight:"#ffffff", correctLevel:QRCode.CorrectLevel.L}); }catch(e){ $("qr2").hidden = true; }
 });
 $("copyHand").onclick = ()=>copyText(handLink(), $("copyHand"), $("handTxt"));
 function copyText(text, btn, shown){
@@ -1887,8 +1894,8 @@ if("serviceWorker" in navigator && location.protocol==="https:"){
   if(g){ openGroupLink(g[1], g[2], g[3]); openStats = true; }
   let m = location.hash.match(new RegExp(`^#watch-${ID}\\.${K22}\\.${P43}\\.${P43}$`));
   if(m){ startViewer(m[1], m[2], m[3], m[4]); return; }
-  m = location.hash.match(new RegExp(`^#score-${ID}\\.${K22}\\.${P43}\\.${P43}\\.${P43}$`));
-  if(m){ takeOver(m[1], m[2], m[3], m[4], m[5]); return; }
+  m = location.hash.match(new RegExp(`^#score-${ID}\\.${K22}\\.${P43}\\.${P43}\\.${P43}(?:\\.([a-z0-9]{22})\\.${K22}\\.${P43})?$`));
+  if(m){ if(m[6]) openGroupLink(m[6], m[7], m[8]); takeOver(m[1], m[2], m[3], m[4], m[5]); return; }
   if(/^#(watch|score)-/.test(location.hash)){ $("setup").hidden = true; $("viewerNote").hidden = false; setNet("Old link","bad"); $("viewerMsg").textContent = "This link is from an older version. Ask the scorer to share the link again."; return; }
   try{
     const saved = JSON.parse(localStorage.getItem(KEY)||"null");
