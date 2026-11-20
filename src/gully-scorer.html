@@ -289,6 +289,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
       <button class="k wk" id="wkBtn" aria-pressed="false">Wicket</button>
       <button class="k undo" id="undoBtn">Undo</button>
     </div>
+    <button class="btn ghost small" id="retBtn" type="button">Retire batter</button>
     <div id="fullTools" class="btns" hidden>
       <button class="btn ghost small" id="swapBtn">Swap strike</button>
       <button class="btn ghost small" id="chgBowl">Change bowler</button>
@@ -440,8 +441,13 @@ const pen = b => b.x==="wd" ? (S.wr===false ? 0 : 1) : b.x==="nb" ? (S.nr===fals
 function stats(inn){
   let runs=0,wk=0,legal=0,wd=0,nb=0;
   for(const b of inn.balls){ runs += b.r + pen(b); if(b.w) wk++; if(!b.x) legal++; if(b.x==="wd") wd += pen(b)+b.r; if(b.x==="nb") nb += pen(b); }
+  wk += rets(inn).filter(r=>r.k==="o").length; /* retired out counts as a wicket */
   return {runs,wk,legal,wd,nb};
 }
+/* retirements: not balls, so they sit in their own list. Retired out = a wicket (can't bat again).
+   Retired hurt = not a wicket; the player can come back in later. */
+const rets = inn => inn.ret || (inn.ret = []);
+const lastRet = (inn, p) => { const l = rets(inn).filter(r=>r.p===p); return l[l.length-1] || null; };
 const oversTxt = l => Math.floor(l/6) + "." + (l%6);
 const wkts = i => full() ? Math.max(1, S.players[i].length - (S.oneSide || S.lastMan ? 0 : 1)) : S.wickets;
 function freeBat(i){ const inn = S.innings[i], outs = outSet(inn); return S.players[i].filter((_,p)=>!outs.has(p) && p!==inn.str && p!==inn.non).length; }
@@ -480,6 +486,7 @@ function batFig(inn, p){
     if(x.s===p && x.x!=="wd"){ r+=x.r; b++; if(x.r===4) f++; if(x.r===6) s++; }
     if(x.w && x.out===p) out=x;
   }
+  if(!out){ const rt = lastRet(inn, p); if(rt && rt.k==="o") out = {wt:"ro"}; }
   return {r,b,f,s,out};
 }
 function bowlFig(inn, p){
@@ -487,7 +494,7 @@ function bowlFig(inn, p){
   for(const x of inn.balls){ if(x.bw!==p) continue; if(!x.x) legal++; r += x.r + pen(x); if(x.w && x.wt==="b") w++; }
   return {legal,r,w};
 }
-function outSet(inn){ const o=new Set(); inn.balls.forEach(b=>{ if(b.w && b.out!=null) o.add(b.out); }); return o; }
+function outSet(inn){ const o=new Set(); inn.balls.forEach(b=>{ if(b.w && b.out!=null) o.add(b.out); }); rets(inn).forEach(r=>{ if(r.k==="o" && r.p!=null) o.add(r.p); }); return o; }
 function need(i){
   const inn = S.innings[i];
   if(!full() || inn.done || S.done) return null;
@@ -529,7 +536,8 @@ function clean(s){
       balls:(inn&&Array.isArray(inn.balls)?inn.balls.slice(0,3000):[]).map(b=>({
         r:n(b&&b.r,6), x:b&&b.x==="wd"?"wd":b&&b.x==="nb"?"nb":null, w:!!(b&&b.w),
         s:ix(b&&b.s), bw:ix(b&&b.bw), out:ix(b&&b.out), wt:b&&b.wt==="r"?"r":b&&b.wt==="b"?"b":null, pre:pos(b&&b.pre),
-        t:b && Number.isInteger(b.t) && b.t>=0 && b.t<=86400 ? b.t : undefined })) }))
+        t:b && Number.isInteger(b.t) && b.t>=0 && b.t<=86400 ? b.t : undefined })),
+      ret:(inn&&Array.isArray(inn.ret)?inn.ret.slice(0,40):[]).map(r=>({ p:ix(r&&r.p), k:r&&r.k==="o"?"o":"h", at:n(r&&r.at,3000), pre:pos(r&&r.pre) })) }))
   };
 }
 
@@ -579,7 +587,7 @@ function render(){
   if(!isViewer){
     syncStats();
     $("statsSaved").hidden = !(S.done && full());
-    const nd = need(i), locked = S.done || inn.done || !!nd || !!held;
+    const nd = need(i), locked = S.done || inn.done || !!nd || !!held || retiring;
     document.querySelectorAll("#pad button").forEach(b=>{ if(b.id!=="undoBtn") b.disabled = locked; });
     $("undoBtn").disabled = !canUndo();
     $("breakBox").hidden = !(i===0 && inn.done);
@@ -596,6 +604,7 @@ function render(){
     const fhNow = freeHitNext(inn);
     $("wkBtn").textContent = fhNow ? "Run out" : "Wicket";
     if(fhNow && !$("hint").textContent) $("hint").textContent = "Free hit: the batter can only be out run out.";
+    $("retBtn").hidden = locked || !!pending || pw || retiring;
     renderPick(nd);
   }
 }
@@ -656,7 +665,18 @@ function commOvers(i){
   const inn = S.innings[i], F = full(), overs = [], bat = {}, t = i===1 ? target() : null;
   const pick = (k, a) => a[k % a.length];
   let runs = 0, wk = 0, legal = 0, fh = false, cur = null;
+  const retLine = r => {
+    if(!cur){ cur = {no:Math.floor(legal/6), items:[], runs:0, wk:0, bw:null}; overs.push(cur); }
+    if(r.k==="o"){ wk++; cur.wk++; }
+    let txt;
+    if(F && r.p!=null){ const f = batFig({balls: inn.balls.slice(0, r.at), ret:[]}, r.p), nm = esc(pname(i, r.p));
+      txt = r.k==="o" ? `<b>RETIRED OUT!</b> ${nm} ${f.r} (${f.b})` : `${nm} retires hurt on ${f.r} (${f.b}). Can bat again later.`; }
+    else txt = r.k==="o" ? "<b>RETIRED OUT!</b> Counts as a wicket" : "Batter retires hurt";
+    cur.items.push({num:"", txt, cls: r.k==="o" ? "w" : "ms"});
+  };
+  const retsAt = k => rets(inn).filter(r=>r.at===k).forEach(retLine);
   inn.balls.forEach((b, k)=>{
+    retsAt(k);
     const ov = Math.floor(legal/6);
     if(!cur || cur.no !== ov){ cur = {no:ov, items:[], runs:0, wk:0, bw:null}; overs.push(cur); }
     const free = fh, tot = b.r + pen(b), before = runs;
@@ -700,6 +720,7 @@ function commOvers(i){
       cur.end = s;
     }
   });
+  retsAt(inn.balls.length);
   return overs;
 }
 let commSel = null, commAll = false;
@@ -881,6 +902,7 @@ let sumBlob = null, sumFor = -1, sumUrl = null;
 function battedList(inn){
   const out = [];
   inn.balls.forEach(b=>{ if(b.s!=null && !out.includes(b.s)) out.push(b.s); if(b.out!=null && !out.includes(b.out)) out.push(b.out); });
+  rets(inn).forEach(r=>{ if(r.p!=null && !out.includes(r.p)) out.push(r.p); });
   [inn.str, inn.non].forEach(p=>{ if(p!=null && !out.includes(p)) out.push(p); });
   return out;
 }
@@ -1010,13 +1032,12 @@ function renderCard(){
     const inn = S.innings[i]; if(!inn.balls.length && inn.str==null) return;
     const st = stats(inn);
     h += `<h3>${esc(S.teams[i])} ${st.runs}/${st.wk} (${oversTxt(st.legal)} ov)</h3>`;
-    const batted = [];
-    inn.balls.forEach(b=>{ if(b.s!=null && !batted.includes(b.s)) batted.push(b.s); if(b.out!=null && !batted.includes(b.out)) batted.push(b.out); });
-    [inn.str, inn.non].forEach(p=>{ if(p!=null && !batted.includes(p)) batted.push(p); });
+    const batted = battedList(inn);
     h += `<div class="tw"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th></tr></thead><tbody>`;
     batted.forEach(p=>{
       const f = batFig(inn,p);
-      const how = f.out ? (f.out.wt==="r" ? "run out" : "b " + pname(1-i, f.out.bw)) : (!inn.done && (p===inn.str||p===inn.non) ? "batting" : "not out");
+      const rt = lastRet(inn, p), atCrease = !inn.done && (p===inn.str||p===inn.non);
+      const how = f.out ? (f.out.wt==="r" ? "run out" : f.out.wt==="ro" ? "retired out" : "b " + pname(1-i, f.out.bw)) : atCrease ? "batting" : rt && rt.k==="h" ? "retired hurt" : "not out";
       h += `<tr><td>${esc(pname(i,p))}<span class="how">${esc(how)}</span></td><td>${f.r}</td><td>${f.b}</td><td>${f.f}</td><td>${f.s}</td></tr>`;
     });
     h += `<tr><td>Extras</td><td colspan="4">${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})</td></tr></tbody></table></div>`;
@@ -1036,10 +1057,27 @@ function opt(sel, value, text){ const o=document.createElement("option"); o.valu
 function selectBox(id, label, team, list){
   const l = document.createElement("label"); l.htmlFor = id; l.textContent = label;
   const s = document.createElement("select"); s.id = id; opt(s, "", "Choose…");
-  list.forEach(p=>opt(s, p, pname(team,p))); l.appendChild(s); return l;
+  const inn = S.innings[S.cur], hurt = p => team===S.cur && (lastRet(inn,p)||{}).k==="h";
+  list.forEach(p=>opt(s, p, pname(team,p) + (hurt(p) ? " (retired hurt)" : ""))); l.appendChild(s); return l;
 }
 function renderPick(nd){
   const box = $("pick");
+  if(retiring){
+    const inn = S.innings[S.cur], i = S.cur;
+    box.hidden = false; box.innerHTML = "";
+    const t = document.createElement("div"); t.className="ttl"; t.textContent = "Retire a batter"; box.appendChild(t);
+    const n = document.createElement("p"); n.className = "note";
+    n.textContent = full() ? "Retired hurt: not a wicket, the player can bat again later. Retired out: counts as a wicket, the player can't bat again."
+                           : "Retired out counts as a wicket. Retired hurt doesn't change the score, so in Quick score there's nothing to record for it.";
+    box.appendChild(n);
+    const btns = document.createElement("div"); btns.className = "btns";
+    const add = (txt, p, k, cls) => { const b=document.createElement("button"); b.className="btn "+(cls||""); b.textContent=txt; b.onclick=()=>doRetire(p,k); btns.appendChild(b); };
+    if(full()){
+      [inn.str, inn.non].filter(p=>p!=null).forEach(p=>{ add(`${pname(i,p)} retired hurt`, p, "h", "ghost"); add(`${pname(i,p)} retired out`, p, "o", "ghost"); });
+    } else add("Retired out (counts as a wicket)", null, "o", "ghost");
+    const c=document.createElement("button"); c.className="btn ghost small"; c.textContent="Cancel"; c.onclick=()=>{ retiring=false; render(); }; btns.appendChild(c);
+    box.appendChild(btns); return;
+  }
   if(held){
     const inn = S.innings[S.cur], i = S.cur;
     box.hidden = false; box.innerHTML = "";
@@ -1106,18 +1144,42 @@ function addBall(r){
 }
 function finishWicket(out, wt){
   if(freeHitNext(S.innings[S.cur])) wt = "r"; const b = held; held = null; b.out = out; b.wt = wt; push(b); }
+let retiring = false;
+function doRetire(p, k){
+  const i = S.cur, inn = S.innings[i]; retiring = false;
+  rets(inn).push({p, k, at: inn.balls.length, pre:{str:inn.str, non:inn.non, bw:inn.bw, prev:inn.prev}});
+  if(full() && p!=null){ if(inn.str===p) inn.str = null; else if(inn.non===p) inn.non = null; }
+  if(inningsOver(i)) inn.done = true;
+  else if(full()){
+    const atCrease = [inn.str, inn.non].filter(x=>x!=null);
+    const others = freeBat(i) - (k==="h" && p!=null ? 1 : 0); /* the player who just retired hurt doesn't count as "next in" */
+    if(others===0){
+      /* nobody left to come in: last man bats alone if allowed, otherwise the innings ends */
+      if(S.lastMan && atCrease.length===1){ inn.str = atCrease[0]; inn.non = null; }
+      else if(!atCrease.length || !S.oneSide) inn.done = true;
+    }
+  }
+  if(inn.done && i===1) S.done = true;
+  pending = null; pw = false;
+  commit();
+}
+/* the newest event in an innings: a retirement made after its last ball, or that ball */
+const retLast = inn => { const r = rets(inn); const x = r[r.length-1]; return x && x.at===inn.balls.length ? x : null; };
 function canUndo(){
-  if(held) return false;
+  if(held || retiring) return false;
   const i = S.cur, inn = S.innings[i];
   const ok = b => !full() || !!b.pre;
+  if(retLast(inn)) return ok(retLast(inn));
   if(inn.balls.length) return ok(inn.balls[inn.balls.length-1]);
-  const p = S.innings[0].balls;
-  return i===1 && p.length>0 && ok(p[p.length-1]);
+  const p = S.innings[0];
+  return i===1 && (!!retLast(p) || (p.balls.length>0 && ok(p.balls[p.balls.length-1])));
 }
 function undo(){
   if(!canUndo()) return;
   let inn = S.innings[S.cur];
-  if(!inn.balls.length && S.cur===1){ Object.assign(inn,{str:null,non:null,bw:null,prev:null}); S.cur = 0; inn = S.innings[0]; }
+  if(!inn.balls.length && !retLast(inn) && S.cur===1){ Object.assign(inn,{str:null,non:null,bw:null,prev:null}); S.cur = 0; inn = S.innings[0]; }
+  const r = retLast(inn);
+  if(r){ rets(inn).pop(); if(r.pre) Object.assign(inn, r.pre); inn.done = false; S.done = false; pending = null; pw = false; commit(); return; }
   if(!inn.balls.length) return;
   const b = inn.balls.pop(); if(b.pre) Object.assign(inn, b.pre);
   inn.done = false; S.done = false; pending = null; pw = false; held = null; commit();
@@ -1133,6 +1195,7 @@ $("wkBtn").onclick = ()=>{
   pw = !pw; render();
 };
 $("undoBtn").onclick = undo;
+$("retBtn").onclick = ()=>{ retiring = true; pending = null; pw = false; render(); };
 $("nextInn").onclick = ()=>{ S.cur = 1; commit(); };
 $("swapBtn").onclick = ()=>{ const inn=S.innings[S.cur]; [inn.str,inn.non]=[inn.non,inn.str]; commit(); };
 $("chgBowl").onclick = ()=>{ const inn=S.innings[S.cur]; inn.bw = null; commit(); };

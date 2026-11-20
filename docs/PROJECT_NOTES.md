@@ -2,7 +2,7 @@
 
 Live scoring for gully and box cricket. One phone scores, everyone else watches live through a link or QR code. Free to run, no sign-up, privacy first.
 
-Last updated: 17 Nov 2026
+Last updated: 20 Nov 2026
 
 ## Links
 
@@ -51,6 +51,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Strike rotation; One-side batting (single batter); Last man bats alone
 - Toggles: wide gives 1 run, no-ball gives 1 run, one-tap wide and wicket (off by default), free hit (on by default)
 - Coin toss with bat or bowl choice; Swap batting order
+- Retire batter (button under the pad): **Retired hurt** (not a wicket; player listed as "(retired hurt)" and can bat again) or **Retired out** (counts as a wicket; can't bat again). Quick score offers Retired out only. Stored as `inn.ret` entries `{p, k:"h"|"o", at, pre}` beside the balls (not a ball), with their own Undo; shown in commentary, scorecard ("retired hurt" / "retired out") and stats (retired out = dismissed). If the last batter retires hurt with nobody to come in, the partner bats alone when Last man bats alone is on, otherwise the innings ends.
 
 **Sharing**
 - Watch link, QR code, WhatsApp button

@@ -122,6 +122,38 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   check("stats text for WhatsApp", (await D.textContent("#statsTxt")).includes("PLAYER STATS"));
   if (process.env.SHOT) { await D.setViewportSize({ width: 390, height: 1400 }); await D.click('#statsTab [data-t="bat"]'); await D.click("#statsMatches summary"); await D.locator("#statsCard").screenshot({ path: process.env.SHOT.replace(".png", "-stats.png") }); }
 
+  // Retired hurt and retired out
+  const sc = async p => (await p.evaluate(() => { const t = stats(S.innings[S.cur]); return t.runs + "/" + t.wk; }));
+  const R = await phone(); await R.goto(SITE); await R.evaluate(() => localStorage.clear()); await R.goto(SITE);
+  await R.check("#mFull"); await R.fill("#t1", "Reds"); await R.fill("#t2", "Blues");
+  await R.fill("#p1", "Ann\nBob\nCal\nDan"); await R.fill("#p2", "Xi\nYan"); await R.fill("#ov", "3");
+  await R.click("button[type=submit]"); await R.waitForTimeout(400); await pick(R);
+  const retire = async txt => { await tap(R, "#retBtn"); await R.click(`#pick button:has-text("${txt}")`); await R.waitForTimeout(150); };
+  const newBat = async name => { await R.selectOption("#selBat", { label: name }); await tap(R, "#pick .btn"); };
+  await tap(R, '[data-r="2"]');
+  await retire("Ann retired hurt");
+  check("retired hurt is not a wicket", (await sc(R)) === "2/0", await sc(R));
+  const opts = await R.$$eval("#selBat option", o => o.map(x => x.textContent));
+  check("retired hurt player can bat again", opts.includes("Ann (retired hurt)") && opts.includes("Cal"), opts.join(", "));
+  await newBat("Cal");
+  await retire("Bob retired out");
+  check("retired out counts as a wicket", (await sc(R)) === "2/1", await sc(R));
+  check("retired out player can't bat again", !(await R.$$eval("#selBat option", o => o.map(x => x.textContent))).some(t => t.startsWith("Bob")));
+  await tap(R, "#undoBtn");
+  check("undo brings back the retired-out batter", (await sc(R)) === "2/0" && await R.evaluate(() => S.innings[0].non === 1 || S.innings[0].str === 1));
+  await retire("Bob retired out"); await newBat("Ann (retired hurt)");
+  check("retired hurt player comes back in", await R.evaluate(() => [S.innings[0].str, S.innings[0].non].includes(0)));
+  await tap(R, '[data-r="1"]'); await R.waitForTimeout(1500);
+  const RV = await phone(); await RV.goto(await R.textContent("#linkTxt")); await RV.waitForTimeout(2500);
+  const rc = await RV.textContent("#commList");
+  check("viewer commentary shows both retirements", /Ann retires hurt on 2 \(1\)/.test(rc) && /RETIRED OUT! Bob 0 \(0\)/.test(rc), rc.slice(0, 120));
+  check("viewer score counts the retired out", (await sc(RV)) === "3/1", await sc(RV));
+  check("scorecard says retired out", (await RV.evaluate(() => document.body.textContent)).includes("retired out"));
+  const Q = await phone(); await Q.goto(SITE); await Q.evaluate(() => localStorage.clear()); await Q.goto(SITE);
+  await Q.click("button[type=submit]"); await Q.waitForTimeout(300);
+  await tap(Q, "#retBtn"); await Q.click('#pick button:has-text("Retired out")'); await Q.waitForTimeout(150);
+  check("Quick score: retired out adds a wicket", (await sc(Q)) === "0/1", await sc(Q));
+
   // Group stats: one shared encrypted table; players' link views, scorer link adds
   const rec = (id, who, runs) => ({ id, at: Date.now(), teams: ["Reds", "Blues"], res: "Reds won", ov: 2, pl: [who], bat: [{ n: who, r: runs, b: 10, f: 1, s: 1, o: false }], bowl: [{ n: "Yan", l: 12, r: 20, w: 2 }] });
   await D.click("#statsGroup summary"); await D.fill("#gName", "Test Gang"); await D.click("#gCreate"); await D.waitForTimeout(800);
