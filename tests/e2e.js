@@ -144,6 +144,8 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   await retire("Bob retired out"); await newBat("Ann (retired hurt)");
   check("retired hurt player comes back in", await R.evaluate(() => [S.innings[0].str, S.innings[0].non].includes(0)));
   await tap(R, '[data-r="1"]'); await R.waitForTimeout(1500);
+  const order = await R.evaluate(() => battedList(S.innings[0]).map(p => S.players[0][p]));
+  check("batting order follows who came in, even without facing", order.join(",") === "Ann,Bob,Cal", order.join(","));
   const RV = await phone(); await RV.goto(await R.textContent("#linkTxt")); await RV.waitForTimeout(2500);
   const rc = await RV.textContent("#commList");
   check("viewer commentary shows both retirements", /Ann retires hurt on 2 \(1\)/.test(rc) && /RETIRED OUT! Bob 0 \(0\)/.test(rc), rc.slice(0, 120));

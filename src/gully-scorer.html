@@ -928,11 +928,14 @@ $("statsFile").onchange = async ()=>{
 
 /* ---------- match summary image (broadcast-style) ---------- */
 let sumBlob = null, sumFor = -1, sumUrl = null;
+/* batting order: in the order players came to the crease (both openers first, striker first),
+   using who was in before each ball and each retirement, so a batter who never faced still sits in his place */
 function battedList(inn){
-  const out = [];
-  inn.balls.forEach(b=>{ if(b.s!=null && !out.includes(b.s)) out.push(b.s); if(b.out!=null && !out.includes(b.out)) out.push(b.out); });
-  rets(inn).forEach(r=>{ if(r.p!=null && !out.includes(r.p)) out.push(r.p); });
-  [inn.str, inn.non].forEach(p=>{ if(p!=null && !out.includes(p)) out.push(p); });
+  const out = [], add = p => { if(p!=null && !out.includes(p)) out.push(p); };
+  const atRet = k => rets(inn).filter(r=>r.at===k).forEach(r=>{ if(r.pre){ add(r.pre.str); add(r.pre.non); } add(r.p); });
+  inn.balls.forEach((b,k)=>{ atRet(k); if(b.pre){ add(b.pre.str); add(b.pre.non); } add(b.s); add(b.out); });
+  atRet(inn.balls.length);
+  add(inn.str); add(inn.non);
   return out;
 }
 function howOut(inn, i, p, f){
