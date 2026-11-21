@@ -69,6 +69,8 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Each finished match is its own record keyed by match ID; Undo after the end updates or removes it. Viewer phones save nothing
 - Several scorers: each taps Save backup (a .json file, shared or downloaded) and sends it to one phone, which taps Merge a backup. Matches already there are skipped, so nothing is counted twice
 - Matches saved list with Remove; Delete all stats (tap twice)
+- **Fix player names** (phone stats, or shared stats on scorer phones): combine a name into another (same person) or delete a player's stats; each change has Undo. Stored as edits `{nameKey: {k:"m"|"x"|"r", to, at}}` (local `gully-stats-edits`, or `edits` in the group doc plus pending `GROUP.ed`); the newest change per name wins, so undo works across phones. Matches are never changed; future matches under that name follow the same rule
+- **Common player** on both sides: the same name may be in both teams' lists (only duplicates inside one team are refused); stats key by name, so both sides add up to one person, counted once per match
 
 **Group stats (shared, optional)**
 - One tap, no "create group" step: **Share stats link on WhatsApp** (in Player stats, and on the match-end screen for Full matches). The first tap quietly sets up the online stats (named "Player stats") and opens WhatsApp so the user picks their existing WhatsApp group; later taps reuse the same link. Two links: **players' link** `#group-<id>.<key>` (view only) and **scorer link** `#gscore-<id>.<key>.<token>` (can add and remove matches; send privately)

@@ -195,6 +195,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
         <label for="p1">Team A players<textarea id="p1" placeholder="One name per line"></textarea></label>
         <label for="p2">Team B players<textarea id="p2" placeholder="One name per line"></textarea></label>
       </div>
+      <p class="note" id="commonNote" hidden>Common player who plays for both sides? Type the same name in both lists. Their runs and wickets from both sides count for one person in player stats.</p>
       <label id="oneSideLab" for="oneSide" class="chk" hidden><input type="checkbox" id="oneSide"><span><b>One-side batting</b><br>One batter at a time, no non-striker. Every player bats, so the team is all out when all are out.</span></label>
       <label id="lastManLab" for="lastMan" class="chk" hidden><input type="checkbox" id="lastMan"><span><b>Last man bats alone</b><br>Two batters as normal. When one batter is left, he keeps batting alone until he's out. Off: all out when one batter is left.</span></label>
       <p id="rosterNote" class="note" hidden>One name per line, 2 to 15 players. Leave a box empty to use Player 1, Player 2 and so on. All out when one batter is left.</p>
@@ -261,6 +262,20 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
         </div>
         <input type="file" id="statsFile" accept=".json,application/json" hidden>
         <p class="note" id="statsMsg" aria-live="polite"></p>
+      </div>
+    </details>
+    <details class="toss" id="statsFix">
+      <summary>Fix player names</summary>
+      <div class="tossIn">
+        <p class="note" id="fixNote">Combine two names that are the same person (e.g. "Sam" and "Samuvel"), or delete one person's stats.</p>
+        <label for="fixP">Player<select id="fixP"></select></label>
+        <label for="fixTo">Same person as<select id="fixTo"></select></label>
+        <div class="btns">
+          <button type="button" class="btn ghost small" id="fixMerge">Combine</button>
+          <button type="button" class="btn danger small" id="fixDel">Delete this player's stats</button>
+        </div>
+        <div id="fixList"></div>
+        <p class="note" id="fixMsg" aria-live="polite"></p>
       </div>
     </details>
     <details class="toss" id="statsMatches">
@@ -822,11 +837,43 @@ function syncStats(){
     if(GROUP && GROUP.t){ setPend(true); groupSync(); }
   } else if(ix>=0){ list.splice(ix,1); saveStats(list); }
 }
-function aggregate(list){
-  const P = new Map(), get = name => { const k = nkey(name); if(!P.has(k)) P.set(k, {name, m:0, inn:0, r:0, b:0, no:0, hs:-1, hsNo:false, f:0, s:0, fifties:0, l:0, rc:0, w:0, bw:-1, br:0}); const p = P.get(k); p.name = name; return p; };
+/* name fixes: { key(name): {k:"m" (same person as `to`) | "x" (deleted) | "r" (undone), to, at} }.
+   The newest change for a name wins, so Undo works across phones. Matches themselves are never changed. */
+function cleanEdits(o){
+  const out = {};
+  if(!o || typeof o!=="object" || Array.isArray(o)) return out;
+  Object.keys(o).slice(0,300).forEach(k=>{
+    const e = o[k], key = nkey(k).slice(0,20);
+    if(!key || !e || !["m","x","r"].includes(e.k)) return;
+    const at = Number.isFinite(+e.at) ? Math.max(0, Math.min(9e15, Math.floor(+e.at))) : 0;
+    const to = String(e.to==null?"":e.to).replace(/\s+/g," ").trim().slice(0,20);
+    if(e.k==="m" && (!to || nkey(to)===key)) return;
+    if(!out[key] || at > out[key].at) out[key] = e.k==="m" ? {k:"m", to, at} : {k:e.k, at};
+  });
+  return out;
+}
+const mergeEdits = (a, b) => { const o = {...a}; Object.keys(b).forEach(k=>{ if(!o[k] || b[k].at > o[k].at) o[k] = b[k]; }); return o; };
+const LEDITS = "gully-stats-edits";
+function loadLocalEdits(){ try{ return cleanEdits(JSON.parse(localStorage.getItem(LEDITS)||"null")); }catch(e){ return {}; } }
+/* follow "same person as" links; null means deleted */
+function resolveName(name, E){
+  let n = name;
+  for(let hop = 0; hop < 6; hop++){
+    const e = E[nkey(n)];
+    if(!e || e.k==="r") return n;
+    if(e.k==="x") return null;
+    n = e.to;
+  }
+  return n;
+}
+function aggregate(list, E){
+  E = E || {};
+  const P = new Map(), get0 = name => { const k = nkey(name); if(!P.has(k)) P.set(k, {name, m:0, inn:0, r:0, b:0, no:0, hs:-1, hsNo:false, f:0, s:0, fifties:0, l:0, rc:0, w:0, bw:-1, br:0}); const p = P.get(k); p.name = name; return p; };
+  const skip = {inn:0, r:0, b:0, f:0, s:0, no:0, fifties:0, hs:-1, l:0, rc:0, w:0, bw:-1, br:0, m:0}; /* sink for deleted players */
+  const get = name => { const n = resolveName(name, E); return n==null ? {...skip} : get0(n); };
   list.slice().sort((a,b)=>a.at-b.at).forEach(m=>{
     const inMatch = new Set();
-    [...m.pl, ...m.bat.map(b=>b.n), ...m.bowl.map(b=>b.n)].forEach(n=>{ const k = nkey(n); if(!inMatch.has(k)){ inMatch.add(k); get(n).m++; } });
+    [...m.pl, ...m.bat.map(b=>b.n), ...m.bowl.map(b=>b.n)].forEach(n=>{ const r = resolveName(n, E); if(r==null) return; const k = nkey(r); if(!inMatch.has(k)){ inMatch.add(k); get(n).m++; } });
     m.bat.forEach(b=>{ const p = get(b.n); p.inn++; p.r += b.r; p.b += b.b; p.f += b.f; p.s += b.s; if(!b.o) p.no++; if(b.r>=50) p.fifties++;
       if(b.r > p.hs || (b.r===p.hs && !b.o)){ p.hs = b.r; p.hsNo = !b.o; } });
     m.bowl.forEach(b=>{ const p = get(b.n); p.l += b.l; p.rc += b.r; p.w += b.w; if(b.w > p.bw || (b.w===p.bw && b.r < p.br)){ p.bw = b.w; p.br = b.r; } });
@@ -857,7 +904,7 @@ function statsText(list, A){
 }
 let statsTab = "bat";
 function renderStats(){
-  const G = groupView(), list = G ? G.matches : loadStats(), A = aggregate(list);
+  const G = groupView(), list = G ? G.matches : loadStats(), E = currentEdits(G), A = aggregate(list, E);
   const local = loadStats().length;
   $("statsSrc").hidden = !GROUP || !local;
   document.querySelectorAll("#statsSrc button").forEach(b=>b.setAttribute("aria-pressed", (b.dataset.s==="group") === !!G));
@@ -876,6 +923,7 @@ function renderStats(){
       A.bowl.map(p=>`<tr class="srow"><td>${esc(p.name)}</td><td>${p.m}</td><td>${oversTxt(p.l)}</td><td>${p.rc}</td><td><b>${p.w}</b></td><td>${p.bw}/${p.br}</td><td>${econTxt(p)}</td></tr>`).join("") + `</tbody></table></div>`;
   }
   $("statsTable").innerHTML = h;
+  renderFix(list, E, G);
   const txt = statsText(list, A);
   $("statsTxt").textContent = txt; $("statsWa").href = "https://wa.me/?text=" + encodeURIComponent(txt);
   $("statsMatches").querySelector("summary").textContent = `Matches saved (${list.length})`;
@@ -1413,7 +1461,7 @@ $("chBowl").onclick = ()=>tossChoice(false);
 /* ---------- setup ---------- */
 function syncMode(){
   const f = $("mFull").checked;
-  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("oneSideLab").hidden = !f; $("lastManLab").hidden = f && $("oneSide").checked; $("paLab").hidden = f;
+  $("rosters").hidden = !f; $("rosterNote").hidden = !f; $("commonNote").hidden = !f; $("oneSideLab").hidden = !f; $("lastManLab").hidden = f && $("oneSide").checked; $("paLab").hidden = f;
   $("setupErr").textContent = "";
 }
 $("mQuick").addEventListener("change", syncMode); $("mFull").addEventListener("change", syncMode); $("oneSide").addEventListener("change", syncMode);
@@ -1695,7 +1743,7 @@ let GROUP = null, statsSrc = "group", gBusy = false, gAgain = false, gOffline = 
 try{
   const g = JSON.parse(localStorage.getItem(GKEY)||"null");
   if(g && /^[a-z0-9]{22}$/.test(g.id) && /^[A-Za-z0-9_-]{22}$/.test(g.k) && (g.t==null || /^[A-Za-z0-9_-]{43}$/.test(g.t)))
-    GROUP = {id:g.id, k:g.k, t:g.t||null, name:String(g.name||"Our group").slice(0,30), del:Array.isArray(g.del)?g.del.filter(x=>typeof x==="string").slice(0,500):[]};
+    GROUP = {id:g.id, k:g.k, t:g.t||null, name:String(g.name||"Our group").slice(0,30), del:Array.isArray(g.del)?g.del.filter(x=>typeof x==="string").slice(0,500):[], ed:cleanEdits(g.ed)};
 }catch(e){}
 function saveGroup(){ try{ GROUP ? localStorage.setItem(GKEY, JSON.stringify(GROUP)) : localStorage.removeItem(GKEY); }catch(e){} }
 const setPend = on => { try{ on ? localStorage.setItem(GPEND,"1") : localStorage.removeItem(GPEND); }catch(e){} };
@@ -1710,7 +1758,8 @@ function cleanDoc(o){
   if(!o || o.app!=="gully-scorer-group") return null;
   return { app:"gully-scorer-group", v:1, name:String(o.name||"Our group").replace(/\s+/g," ").trim().slice(0,30) || "Our group",
     matches: cleanStats({app:"gully-scorer-stats", matches:o.matches}),
-    del: Array.isArray(o.del) ? [...new Set(o.del.filter(x=>typeof x==="string" && /^[a-z0-9]{6,24}$/.test(x)))].slice(0,5000) : [] };
+    del: Array.isArray(o.del) ? [...new Set(o.del.filter(x=>typeof x==="string" && /^[a-z0-9]{6,24}$/.test(x)))].slice(0,5000) : [],
+    edits: cleanEdits(o.edits) };
 }
 function readCache(){ try{ const c = JSON.parse(localStorage.getItem(GCACHE)||"null"); return c && c.id===GROUP.id ? {v:c.v|0, at:c.at||0, doc:cleanDoc(c.doc)} : null; }catch(e){ return null; } }
 function writeCache(doc, v){ try{ localStorage.setItem(GCACHE, JSON.stringify({id:GROUP.id, v, at:Date.now(), doc})); }catch(e){} }
@@ -1749,9 +1798,9 @@ async function gGet(){
 function mergeDoc(doc, local){
   const del = new Set([...doc.del, ...(GROUP.del||[])]), by = new Map();
   for(const m of [...doc.matches, ...local]){ if(del.has(m.id)) continue; const o = by.get(m.id); if(!o || m.at > o.at) by.set(m.id, m); }
-  return { ...doc, name: doc.name || GROUP.name, matches: [...by.values()].sort((a,b)=>a.at-b.at), del: [...del] };
+  return { ...doc, name: doc.name || GROUP.name, matches: [...by.values()].sort((a,b)=>a.at-b.at), del: [...del], edits: mergeEdits(doc.edits||{}, cleanEdits(GROUP.ed)) };
 }
-const sig = d => JSON.stringify([d.name, d.matches.map(m=>[m.id, m.at]), d.del.slice().sort()]);
+const sig = d => JSON.stringify([d.name, d.matches.map(m=>[m.id, m.at]), d.del.slice().sort(), Object.keys(d.edits||{}).sort().map(k=>[k, d.edits[k].k, d.edits[k].to||"", d.edits[k].at])]);
 async function groupSync(){
   if(!GROUP || !OWN_RELAY) return;
   if(gBusy){ gAgain = true; return; }
@@ -1770,9 +1819,9 @@ async function groupSync(){
       if(doc.name && doc.name!==GROUP.name){ GROUP.name = doc.name; saveGroup(); }
       if(!GROUP.t){ writeCache(doc, v); gMsg(""); return; }
       const merged = mergeDoc(doc, loadStats());
-      if(v > 0 && sig(merged)===sig(doc)){ writeCache(doc, v); setPend(false); GROUP.del = []; saveGroup(); gMsg(""); return; }
+      if(v > 0 && sig(merged)===sig(doc)){ writeCache(doc, v); setPend(false); GROUP.del = []; GROUP.ed = {}; saveGroup(); gMsg(""); return; }
       const r = await fetch(gUrl("put"), {method:"POST", body: await gSeal(merged), cache:"no-store", referrerPolicy:"no-referrer", headers:{"X-Token":GROUP.t, "X-Base":String(v)}});
-      if(r.ok){ writeCache(merged, parseInt(await r.text(),10)||v+1); setPend(false); GROUP.del = []; saveGroup(); gMsg("Group stats updated."); return; }
+      if(r.ok){ writeCache(merged, parseInt(await r.text(),10)||v+1); setPend(false); GROUP.del = []; GROUP.ed = {}; saveGroup(); gMsg("Group stats updated."); return; }
       if(r.status===403){ gMsg("The group didn't accept this phone's scorer link. Ask your group for the scorer link again."); return; }
       if(r.status===410){ forgetGroup("These online stats were deleted by a scorer. Matches on this phone are still kept here."); return; }
       if(r.status===409 || r.status===429){ await sleep(1200); continue; } /* someone else saved first: merge again */
@@ -1790,6 +1839,59 @@ async function groupSync(){
   }
 }
 addEventListener("online", ()=>{ if(GROUP && (isPend() || !$("statsCard").hidden)) groupSync(); });
+/* ---------- fix player names: combine two names, or delete a player's stats ---------- */
+function currentEdits(G){
+  if(G){ const c = readCache(); return mergeEdits((c && c.doc && c.doc.edits) || {}, cleanEdits(GROUP.ed)); }
+  return loadLocalEdits();
+}
+function allNames(list){
+  const seen = new Map();
+  list.forEach(m=>[...m.pl, ...m.bat.map(b=>b.n), ...m.bowl.map(b=>b.n)].forEach(n=>{ const k = nkey(n); if(!seen.has(k)) seen.set(k, n); }));
+  return [...seen.values()].sort((a,b)=>a.localeCompare(b));
+}
+function renderFix(list, E, G){
+  const box = $("statsFix"), canEdit = !G || !!(GROUP && GROUP.t);
+  box.hidden = !list.length || !canEdit;
+  if(box.hidden) return;
+  $("fixNote").textContent = G ? "Combine two names that are the same person (e.g. \"Sam\" and \"Samuvel\"), or delete one person's stats. Changes apply to the shared stats for everyone. Matches themselves aren't changed, so you can undo."
+                               : "Combine two names that are the same person (e.g. \"Sam\" and \"Samuvel\"), or delete one person's stats. Matches themselves aren't changed, so you can undo.";
+  const live = allNames(list).filter(n=>{ const r = resolveName(n, E); return r!=null && nkey(r)===nkey(n); });
+  const fill = (sel, names, first) => { const keep = sel.value; sel.innerHTML = ""; if(first) opt(sel, "", first);
+    names.forEach(n=>opt(sel, n, n)); if([...sel.options].some(o=>o.value===keep)) sel.value = keep; };
+  fill($("fixP"), live, "Choose a player…");
+  fill($("fixTo"), live.filter(n=>nkey(n)!==nkey($("fixP").value)), "Choose who they really are…");
+  const active = Object.keys(E).filter(k=>E[k].k!=="r").sort((a,b)=>E[b].at-E[a].at);
+  const names = new Map(allNames(list).map(n=>[nkey(n), n]));
+  $("fixList").innerHTML = active.map(k=>`<div class="mrow"><span>${esc(names.get(k)||k)}<small>${E[k].k==="m" ? `combined into ${esc(E[k].to)}` : "stats deleted"}</small></span><button type="button" class="btn ghost small" data-undo="${esc(k)}">Undo</button></div>`).join("");
+}
+function addEdit(key, e){
+  const G = groupView();
+  if(G){ GROUP.ed = mergeEdits(cleanEdits(GROUP.ed), {[key]: e}); saveGroup(); setPend(true);
+    const c = readCache(); if(c && c.doc) writeCache({...c.doc, edits: mergeEdits(c.doc.edits||{}, {[key]: e})}, c.v);
+    renderStats(); groupSync(); }
+  else { try{ localStorage.setItem(LEDITS, JSON.stringify(mergeEdits(loadLocalEdits(), {[key]: e}))); }catch(err){} renderStats(); }
+}
+const fixMsg = t => { $("fixMsg").textContent = t; };
+$("fixP").onchange = ()=>renderStats();
+$("fixMerge").onclick = ()=>{
+  const a = $("fixP").value, b = $("fixTo").value;
+  if(!a || !b){ fixMsg("Choose the player, then who they really are."); return; }
+  addEdit(nkey(a), {k:"m", to:b, at:Date.now()});
+  fixMsg(`${a} is now combined into ${b}. Future matches under "${a}" count for ${b} too.`);
+};
+$("fixDel").onclick = ()=>{
+  const a = $("fixP").value;
+  if(!a){ fixMsg("Choose the player first."); return; }
+  armed($("fixDel"), `Tap again to delete ${a}'s stats`, 4000, ()=>{
+    addEdit(nkey(a), {k:"x", at:Date.now()});
+    fixMsg(`${a}'s stats are deleted. Future matches under "${a}" won't count either. Tap Undo to bring them back.`);
+  });
+};
+$("fixList").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-undo]"); if(!b) return;
+  addEdit(b.dataset.undo, {k:"r", at:Date.now()}); fixMsg("Undone.");
+});
+
 function renderGroupBox(){
   $("gNew").hidden = !!GROUP; $("gIn").hidden = !GROUP;
   $("gSum").textContent = GROUP ? "Shared stats link" : "Share stats with your WhatsApp group";

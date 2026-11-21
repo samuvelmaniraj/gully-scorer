@@ -122,6 +122,11 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   check("stats totals match the scorecard", await D.evaluate(() => aggregate(loadStats()).bat.reduce((t, p) => t + p.r, 0)) === runsB);
   await D.click('#statsTab [data-t="bowl"]'); check("bowling table shows", /Ben|Kumar|Dev/.test(await D.textContent("#statsTable")));
   check("stats text for WhatsApp", (await D.textContent("#statsTxt")).includes("PLAYER STATS"));
+  await D.evaluate(() => { $("statsFix").open = true; });
+  const pn = await D.$$eval("#fixP option", o => o.map(x => x.value).filter(Boolean));
+  await D.selectOption("#fixP", pn[0]); await D.waitForTimeout(100); await D.selectOption("#fixTo", pn[1]); await D.click("#fixMerge"); await D.waitForTimeout(200);
+  check("phone stats: names combine", await D.evaluate(n => !aggregate(loadStats(), loadLocalEdits()).bat.concat(aggregate(loadStats(), loadLocalEdits()).bowl).some(p => p.name === n), pn[0]));
+  await D.click(`#fixList [data-undo]`); await D.waitForTimeout(200);
   if (process.env.SHOT) { await D.setViewportSize({ width: 390, height: 1400 }); await D.click('#statsTab [data-t="bat"]'); await D.click("#statsMatches summary"); await D.locator("#statsCard").screenshot({ path: process.env.SHOT.replace(".png", "-stats.png") }); }
 
   // Retired hurt and retired out
@@ -157,6 +162,16 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   await Q.click("button[type=submit]"); await Q.waitForTimeout(300);
   await tap(Q, "#retBtn"); await Q.click('#pick button:has-text("Retired out")'); await Q.waitForTimeout(150);
   check("Quick score: retired out adds a wicket", (await sc(Q)) === "0/1", await sc(Q));
+
+  // Common player on both sides: same name allowed in both teams, stats count for one person
+  const CP = await phone(); await CP.goto(SITE); await CP.evaluate(() => localStorage.clear()); await CP.goto(SITE);
+  await CP.check("#mFull"); await CP.fill("#p1", "Sam\nAnn"); await CP.fill("#p2", "Sam\nBen"); await CP.click("button[type=submit]"); await CP.waitForTimeout(300);
+  check("same name allowed in both teams", await CP.evaluate(() => !!S && S.players[0][0] === "Sam" && S.players[1][0] === "Sam"));
+  const cp = await CP.evaluate(() => { const r = { id: "common1", at: 1, teams: ["A", "B"], res: "", ov: 2, pl: ["Sam", "Ann", "Sam", "Ben"],
+    bat: [{ n: "Sam", r: 20, b: 10, f: 2, s: 0, o: true }, { n: "Sam", r: 15, b: 8, f: 1, s: 1, o: false }], bowl: [{ n: "Sam", l: 6, r: 9, w: 1 }, { n: "Sam", l: 6, r: 12, w: 2 }] };
+    const A = aggregate(cleanStats({ app: "gully-scorer-stats", matches: [r] })); const b = A.bat.find(p => p.name === "Sam"), w = A.bowl.find(p => p.name === "Sam");
+    return { r: b.r, inn: b.inn, m: b.m, w: w.w, rows: A.bat.length }; });
+  check("common player's stats from both sides add up to one person", cp.r === 35 && cp.inn === 2 && cp.w === 3 && cp.m === 1 && cp.rows === 1, JSON.stringify(cp));
 
   // Change overs and add players during a match
   const M = await phone(); await M.goto(SITE); await M.evaluate(() => localStorage.clear()); await M.goto(SITE);
@@ -218,6 +233,25 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   check("a finished match on a scorer's phone goes to the group", (await P.textContent("#statsInfo")).startsWith("Player stats: 3 matches"), await P.textContent("#statsInfo"));
   if (process.env.SHOT) { await P.setViewportSize({ width: 390, height: 1500 }); await P.click("#statsGroup summary"); await P.locator("#statsCard").screenshot({ path: "/tmp/grp-player.png" });
     await D.setViewportSize({ width: 390, height: 1700 }); await D.evaluate(() => groupSync()); await D.waitForTimeout(600); await D.locator("#statsCard").screenshot({ path: "/tmp/grp-scorer.png" }); }
+  // Fix player names: combine two names, delete one player's stats, undo (shared stats)
+  const pStats = async ph => ph.evaluate(() => { const A = aggregate(groupView().matches, currentEdits(groupView())); return { bat: Object.fromEntries(A.bat.map(p => [p.name, p.r])), names: [...A.bat, ...A.bowl].map(p => p.name) }; });
+  const nb0 = await pStats(P);
+  check("viewers can't change player names", await P.isHidden("#statsFix"));
+  await E.evaluate(() => { $("statsFix").open = true; }); await E.waitForTimeout(100);
+  const target = nb0.names.find(n => n !== "Dinesh" && n in nb0.bat);
+  await E.selectOption("#fixP", "Dinesh"); await E.waitForTimeout(100); await E.selectOption("#fixTo", target); await E.click("#fixMerge"); await E.waitForTimeout(1600);
+  await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
+  const after = await pStats(P);
+  check("two names combine into one player for everyone", !after.names.includes("Dinesh") && after.bat[target] === nb0.bat[target] + nb0.bat["Dinesh"], `${target}: ${nb0.bat[target]} + ${nb0.bat["Dinesh"]} = ${after.bat[target]}`);
+  await E.selectOption("#fixP", "Yan"); await E.click("#fixDel"); await E.click("#fixDel"); await E.waitForTimeout(1600);
+  await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
+  check("one player's stats can be deleted", !(await pStats(P)).names.includes("Yan"));
+  await E.click('#fixList [data-undo="dinesh"]'); await E.waitForTimeout(1600);
+  await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
+  const undone = await pStats(P);
+  check("undo brings a combined player back", undone.bat["Dinesh"] === nb0.bat["Dinesh"] && undone.bat[target] === nb0.bat[target] && !undone.names.includes("Yan"));
+  check("matches themselves are unchanged", await P.evaluate(() => groupView().matches.some(m => m.bat.some(b => b.n === "Yan") || m.bowl.some(b => b.n === "Yan"))));
+
   // Handover carries the online stats link, so the new scorer adds to the same stats
   await D.goto(SITE); await D.click("button[type=submit]"); await D.waitForTimeout(400);
   const hl = await D.evaluate(() => handLink());
