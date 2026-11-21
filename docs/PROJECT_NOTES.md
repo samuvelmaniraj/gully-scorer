@@ -76,6 +76,7 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Scorer phones add each finished Full match automatically; offline phones retry when back online or when Player stats is opened. Merge keeps the newest copy of each match by match ID, so nothing is counted twice
 - Handover carries the stats link: when the phone has a scorer link, the handover link gets an optional suffix `.<groupId>.<key>.<token>` after the usual `#score-…` parts, so the new scorer joins the same online stats automatically and its finished matches are added. Old handover links without the suffix still work. Handover QR is drawn larger when the suffix is present
 - Two scorers saving at once: the relay accepts only the version the phone last saw (409 otherwise) and the phone merges again
+- **Delete all online stats** (scorer phones only, tap twice): relay `/g/grp-<id>/del` with `X-Token` wipes the group and keeps only a "deleted" marker for 12 months (get returns `-1`, put returns 410), so other scorer phones can't quietly re-upload old matches; every phone that next syncs forgets the group and says it was deleted. Each phone's own copy stays until Delete all stats on that phone
 - Removing a match on a scorer phone removes it for the whole group (kept as a removed ID so other phones don't add it back)
 - The link's key is cleared from the address bar after opening. "Leave group on this phone" forgets the group on that phone only
 - A phone keeps one group. Viewers see a Group / This phone switch only if the phone also has its own stats

@@ -24,7 +24,7 @@ export default {
     /* only the Gully Scorer site may use this relay */
     if (!ORIGINS.includes(origin)) return new Response("Forbidden", { status: 403 });
     const path = new URL(req.url).pathname;
-    const g = path.match(/^\/g\/([^/]+)\/(get|put)$/);
+    const g = path.match(/^\/g\/([^/]+)\/(get|put|del)$/);
     let res;
     if (g) {
       if (!GROUP.test(g[1])) return new Response("Not found", { status: 404, headers: cors });
@@ -93,11 +93,27 @@ export class Group extends DurableObject {
   constructor(ctx, env) { super(ctx, env); this.lastAt = 0; }
   async fetch(req) {
     const kind = new URL(req.url).pathname.split("/").pop(), nc = { "Cache-Control": "no-store" };
+    const gone = await this.ctx.storage.get("gone");
     if (kind === "get" && req.method === "GET") {
+      if (gone) return new Response("-1\n", { headers: { "Content-Type": "text/plain", ...nc } }); /* deleted by a scorer */
       const v = (await this.ctx.storage.get("v")) || 0, data = (await this.ctx.storage.get("data")) || "";
       return new Response(`${v}\n${data}`, { headers: { "Content-Type": "text/plain", ...nc } });
     }
+    /* delete everything; keep only a "deleted" marker for 12 months so other scorer phones
+       don't quietly upload their old matches again */
+    if (kind === "del" && req.method === "POST") {
+      const token = req.headers.get("X-Token") || "";
+      if (!TOKEN.test(token)) return new Response("Bad request", { status: 400 });
+      if (gone) return new Response("Deleted", { headers: nc });
+      const hash = await this.ctx.storage.get("hash");
+      if (!hash || !same(hash, await sha256(token))) return new Response("Not allowed", { status: 403 });
+      await this.ctx.storage.deleteAll();
+      await this.ctx.storage.put("gone", true);
+      await this.ctx.storage.setAlarm(Date.now() + GROUP_TTL_MS);
+      return new Response("Deleted", { headers: nc });
+    }
     if (kind === "put" && req.method === "POST") {
+      if (gone) return new Response("Deleted", { status: 410 });
       const token = req.headers.get("X-Token") || "", base = Number(req.headers.get("X-Base"));
       if (!TOKEN.test(token) || !Number.isInteger(base) || base < 0) return new Response("Bad request", { status: 400 });
       const body = await req.text();

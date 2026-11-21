@@ -24,7 +24,9 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
         if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors, body: "" });
         if (area === "g") { /* same rules as worker/relay.js Group */
           const g = groups[topic] ||= { v: 0, data: "", token: null };
-          if (kind === "get") return route.fulfill({ status: 200, headers: cors, body: `${g.v}\n${g.data}` });
+          if (kind === "get") return route.fulfill({ status: 200, headers: cors, body: g.gone ? "-1\n" : `${g.v}\n${g.data}` });
+          if (kind === "del") { if (req.headers()["x-token"] !== g.token) return route.fulfill({ status: 403, headers: cors, body: "Not allowed" }); Object.assign(g, { gone: true, data: "" }); return route.fulfill({ status: 200, headers: cors, body: "Deleted" }); }
+          if (g.gone) return route.fulfill({ status: 410, headers: cors, body: "Deleted" });
           const h = req.headers(), token = h["x-token"], base = Number(h["x-base"]), body = req.postData() || "";
           if (!/^[A-Za-z0-9_-]{43}$/.test(token || "") || !body.startsWith("gs1.")) return route.fulfill({ status: 400, headers: cors, body: "Bad" });
           if (g.token ? g.token !== token : base !== 0) return route.fulfill({ status: 403, headers: cors, body: "Not allowed" });
@@ -225,6 +227,15 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   const F = await phone(); await F.goto(scoreLink.replace(/\.[A-Za-z0-9_-]{43}$/, "." + "Z".repeat(43))); await F.waitForTimeout(400);
   await F.evaluate(r => { saveStats([r]); return groupSync(); }, rec("ffffff1", "Faker", 99)); await F.waitForTimeout(300);
   check("a fake scorer link can't add matches", (await F.textContent("#gMsg")).includes("didn't accept") && groups[gid].v === (await P.evaluate(() => readCache().v)));
+  // Delete all online stats
+  check("viewers can't delete the online stats", await P.isHidden("#gDelete"));
+  await E.evaluate(() => { $("statsGroup").open = true; }); await E.waitForTimeout(200);
+  await E.click("#gDelete"); await E.click("#gDelete"); await E.waitForTimeout(500);
+  check("scorer deletes all online stats", groups[gid].gone === true && await E.evaluate(() => GROUP === null) && (await E.textContent("#gMsg")).includes("All online stats were deleted"), await E.textContent("#gMsg"));
+  await P.evaluate(() => groupSync()); await P.waitForTimeout(500);
+  check("players' link shows the stats were deleted", await P.evaluate(() => GROUP === null) && (await P.textContent("#gMsg")).includes("deleted"));
+  await H.evaluate(() => groupSync()); await H.waitForTimeout(500);
+  check("other scorers don't upload old matches again", groups[gid].gone === true && !groups[gid].data && await H.evaluate(() => GROUP === null));
 
   // Install as an app: manifest, icons and offline copy all load under the security rules
   const C = await phone(); await C.goto(SITE); await C.waitForTimeout(1500);

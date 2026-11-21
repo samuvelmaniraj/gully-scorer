@@ -56,6 +56,12 @@ if (days !== 365) failed++; console.log(`${days === 365 ? "PASS" : "FAIL"}  grou
 const pre = await call(`/g/${G}/put`, { method: "OPTIONS", headers: { Origin: O } });
 const okPre = pre.status === 204 && /X-Token/.test(pre.headers.get("Access-Control-Allow-Headers") || "");
 if (!okPre) failed++; console.log(`${okPre ? "PASS" : "FAIL"}  browsers may send the token header`);
+const del = (token) => call(`/g/${G}/del`, { method: "POST", headers: { Origin: O, "X-Token": token } });
+await expect("wrong token can't delete the stats", await del(BAD), 403);
+await expect("scorer deletes all online stats", await del(TK), 200, "Deleted");
+await expect("deleted stats show as deleted", await call(`/g/${G}/get`, { headers: { Origin: O } }), 200, "-1\n");
+await wait();
+await expect("old matches can't be uploaded again", await put("gs1.again", TK, 0), 410);
 await objs["g:" + G].alarm();
 await expect("deleted group is empty", await call(`/g/${G}/get`, { headers: { Origin: O } }), 200, "0\n");
 

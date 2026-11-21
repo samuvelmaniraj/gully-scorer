@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-qMFHmeBSdmaXXUc2eC8GLwC1WiW6tbuQEWAFRNdr3x4=' https://turfcricscore.com/qrcode.min.js https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://turfcricscore.com/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://turfcricscore.com/apple-touch-icon.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://turfcricscore.com/manifest.webmanifest https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://turfcricscore.com/sw.js https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2Wyj8bSjADJSe+QJn0jI3LeLZDq+vzn0rN3Tt1ip/VQ=' https://turfcricscore.com/qrcode.min.js https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://turfcricscore.com/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://turfcricscore.com/apple-touch-icon.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://turfcricscore.com/manifest.webmanifest https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://turfcricscore.com/sw.js https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -266,6 +266,7 @@ details.toss summary{cursor:pointer;padding:10px 12px;font-weight:600;color:var(
           </div>
           <p class="note" id="gScorerNote">Send the scorer link only to people who score. Anyone with it can add and remove matches. The players' link can only view.</p>
           <button type="button" class="btn danger small" id="gLeave">Leave group on this phone</button>
+          <button type="button" class="btn danger small" id="gDelete">Delete all online stats</button>
         </div>
         <p class="note" id="gMsg" aria-live="polite"></p>
       </div>
@@ -1779,6 +1780,7 @@ async function groupSync(){
     for(let tries = 0; tries < 5; tries++){
       const {v, data} = await gGet();
       gOffline = false;
+      if(v < 0){ forgetGroup("These online stats were deleted by a scorer. Matches on this phone are still kept here."); return; }
       let doc = data ? await gOpen(data) : null;
       if(data && !doc){ gMsg("Couldn't read this group's stats. Check that the link was copied completely."); return; }
       if(!doc){
@@ -1792,6 +1794,7 @@ async function groupSync(){
       const r = await fetch(gUrl("put"), {method:"POST", body: await gSeal(merged), cache:"no-store", referrerPolicy:"no-referrer", headers:{"X-Token":GROUP.t, "X-Base":String(v)}});
       if(r.ok){ writeCache(merged, parseInt(await r.text(),10)||v+1); setPend(false); GROUP.del = []; saveGroup(); gMsg("Group stats updated."); return; }
       if(r.status===403){ gMsg("The group didn't accept this phone's scorer link. Ask your group for the scorer link again."); return; }
+      if(r.status===410){ forgetGroup("These online stats were deleted by a scorer. Matches on this phone are still kept here."); return; }
       if(r.status===409 || r.status===429){ await sleep(1200); continue; } /* someone else saved first: merge again */
       throw new Error("put " + r.status);
     }
@@ -1814,7 +1817,7 @@ function renderGroupBox(){
   $("gRole").textContent = GROUP.t
     ? "Your stats link is set up and this phone is a scorer: finished Full scorecard matches are added automatically. Tap Share stats link to post it in your WhatsApp group again."
     : "This phone can view the shared stats. To add matches from this phone, ask the scorer for the scorer link.";
-  $("gScorerBtns").hidden = $("gScorerNote").hidden = !GROUP.t;
+  $("gScorerBtns").hidden = $("gScorerNote").hidden = $("gDelete").hidden = !GROUP.t;
   if(GROUP.t) $("gAddScorer").href = "https://wa.me/?text=" + encodeURIComponent(`Scorer link for *${GROUP.name}* on TurfCricScore. Keep it private: it lets you add matches to the group's stats.\n${scorerLink()}`);
 }
 $("statsSrc").addEventListener("click", e=>{ const b = e.target.closest("button[data-s]"); if(!b) return; statsSrc = b.dataset.s; renderStats(); });
@@ -1837,6 +1840,21 @@ $("gCreate").onclick = shareStatsLink;
 $("endStats").onclick = shareStatsLink;
 $("gCopy").onclick = ()=>{ gMsg(groupLink()); copyText(groupLink(), $("gCopy"), $("gMsg")); };
 $("gRefresh").onclick = ()=>groupSync();
+function forgetGroup(msg){
+  try{ localStorage.removeItem(GCACHE); }catch(e){}
+  setPend(false); GROUP = null; saveGroup(); statsSrc = "group";
+  if(!$("statsCard").hidden) renderStats();
+  gMsg(msg);
+}
+$("gDelete").onclick = ()=>armed($("gDelete"), "Tap again to delete for everyone", 4000, async ()=>{
+  if(!GROUP || !GROUP.t) return;
+  try{
+    const r = await fetch(gUrl("del"), {method:"POST", cache:"no-store", referrerPolicy:"no-referrer", headers:{"X-Token":GROUP.t}});
+    if(r.ok) forgetGroup("All online stats were deleted. The players' link now shows nothing. Matches on this phone are still kept here; to remove those too, tap Delete all stats.");
+    else if(r.status===403) gMsg("The online stats didn't accept this phone's scorer link, so nothing was deleted.");
+    else gMsg("Couldn't delete right now. Try again in a moment.");
+  }catch(e){ gMsg("No connection, so nothing was deleted. Try again when you have signal."); }
+});
 $("gLeave").onclick = ()=>armed($("gLeave"), "Tap again to leave", 4000, ()=>{
   try{ localStorage.removeItem(GCACHE); }catch(e){}
   setPend(false); GROUP = null; saveGroup(); gMsg("This phone left the group. The group's stats are still there for everyone else, and you can rejoin with its link.");
