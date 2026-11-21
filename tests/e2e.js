@@ -173,6 +173,20 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
     return { r: b.r, inn: b.inn, m: b.m, w: w.w, rows: A.bat.length }; });
   check("common player's stats from both sides add up to one person", cp.r === 35 && cp.inn === 2 && cp.w === 3 && cp.m === 1 && cp.rows === 1, JSON.stringify(cp));
 
+  // Super Striker: highest strike rate with at least 10 runs; strike rate in the scorecard and text
+  const ssr = await CP.evaluate(() => {
+    const ball = (s, r) => ({ r, x: null, w: false, s, bw: 0 });
+    const st = JSON.parse(JSON.stringify(S));
+    st.players = [["Quick9", "Steady", "Fast"], ["Opp", "Bowl"]];
+    st.innings = [{ done: true, str: null, non: null, balls: [ball(0, 6), ball(0, 3), ball(1, 1), ball(1, 1), ball(1, 4), ball(1, 4), ball(1, 2), ball(2, 6), ball(2, 6)] }, { done: true, str: null, non: null, balls: [ball(0, 1)] }];
+    st.done = true; st.cur = 1; S = clean(st); render();
+    const x = superStriker(); return { name: x && x.name, sr: x && Math.round(x.sr), text: scoreText(), card: document.body.textContent };
+  });
+  check("Super Striker needs 10+ runs and picks the best strike rate", ssr.name === "Steady" || ssr.name === "Fast", JSON.stringify({ name: ssr.name, sr: ssr.sr }));
+  check("Super Striker ignores a quick 9 off 2", ssr.name === "Fast" && ssr.sr === 600, `${ssr.name} ${ssr.sr}`);
+  check("Super Striker in the WhatsApp text", /Super Striker:\* Fast 12\* \(2\), SR 600/.test(ssr.text), ssr.text.split("\n").filter(l => /Super/.test(l)).join(""));
+  check("strike rate in the WhatsApp text", /Batter\s+R\s+B\s+SR/.test(ssr.text));
+
   // Change overs and add players during a match
   const M = await phone(); await M.goto(SITE); await M.evaluate(() => localStorage.clear()); await M.goto(SITE);
   await M.check("#mFull"); await M.fill("#p1", "Ann\nBob"); await M.fill("#p2", "Xi\nYan"); await M.fill("#ov", "1");
@@ -206,7 +220,7 @@ const check = (label, ok, extra = "") => { if (!ok) failed++; console.log(`${ok 
   await D.click("#statsGroup summary"); await D.click("#gCreate"); await D.waitForTimeout(800);
   const gid = Object.keys(groups)[0], G0 = groups[gid] || {};
   check("one tap sets up the stats link and opens WhatsApp", G0.v === 1 && (await D.textContent("#gMsg")).includes("Pick your WhatsApp group") && await D.evaluate(() => !!GROUP.t), await D.textContent("#gMsg"));
-  check("group stats are encrypted on the relay", G0.data.startsWith("gs1.") && !/Sam|Raj|Player stats/.test(G0.data));
+  check("group stats are encrypted on the relay", G0.data.startsWith("gs1.") && !/Sam|Raj|Player stats|matches/.test(Buffer.from(G0.data.slice(4).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("latin1")));
   await D.click("#gInvite"); await D.waitForTimeout(300);
   check("sharing again keeps the same link", Object.keys(groups).length === 1);
   const viewLink = await D.evaluate(() => groupLink()), scoreLink = await D.evaluate(() => scorerLink());

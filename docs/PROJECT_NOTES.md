@@ -62,6 +62,8 @@ Scorer's phone ──encrypted + signed update──▶ Cloudflare relay ──�
 - Match end (Full mode): two more images, a full scorecard per innings (every batter with how out, R, B, 4s, 6s, SR; extras; every bowler with O, R, W, Econ; target or result bar). "Share summary + scorecards" shares all three at once (falls back to the summary alone if a phone can't share several files); Save buttons for each when sharing isn't supported
 - Match end: TV-style summary image (1920×1080) with team bars, top 4 batters and bowlers (Full) or fours/sixes/extras/run rate (Quick), overs played / overs a side, team size, toss and result
 - WhatsApp text table sent with the image; Send as text and Copy text
+- Strike rate (SR) for batters in the summary image, the WhatsApp text and the on-screen scorecard (the innings images already had it)
+- **Super Striker** (Full mode): highest strike rate in the match among batters with at least 10 runs (ties: more runs, then fewer balls), shown as a gold badge on the summary image, a line in the WhatsApp text and a banner under the result
 
 **Player stats (across matches)**
 - "Player stats" button on the New match screen: batting (M, R, HS, Avg, SR, 4s, 6s) and bowling (M, O, R, W, Best, Econ) tables, Share on WhatsApp / Copy text (top 10 each)

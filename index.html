@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-knEPYXnT+N5rdFM3ALxfvubx6B2PNElC9NQXPni6sdY=' https://turfcricscore.com/qrcode.min.js https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://turfcricscore.com/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://turfcricscore.com/apple-touch-icon.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://turfcricscore.com/manifest.webmanifest https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://turfcricscore.com/sw.js https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-GHv8+ICY0nvqzp9mOmFUF79obQ/omNGIm0rGhPtRoKc=' https://turfcricscore.com/qrcode.min.js https://samuvelmaniraj.github.io/gully-scorer/qrcode.min.js; style-src 'unsafe-inline'; img-src data: blob: https://turfcricscore.com/icon-192.png https://samuvelmaniraj.github.io/gully-scorer/icon-192.png https://turfcricscore.com/apple-touch-icon.png https://samuvelmaniraj.github.io/gully-scorer/apple-touch-icon.png; connect-src https://gully-relay.s-samuvelmaniraj.workers.dev wss://gully-relay.s-samuvelmaniraj.workers.dev; manifest-src https://turfcricscore.com/manifest.webmanifest https://samuvelmaniraj.github.io/gully-scorer/manifest.webmanifest; worker-src https://turfcricscore.com/sw.js https://samuvelmaniraj.github.io/gully-scorer/sw.js; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex,nofollow">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -640,6 +640,8 @@ function render(){
   if(i===0 && S.toss) html += `<div class="prev">${esc(S.toss)}</div>`;
   if(i===1){ const p = stats(S.innings[0]); html += `<div class="prev">${esc(S.teams[0])}: ${p.runs}/${p.wk} (${oversTxt(p.legal)} ov)</div>`; }
   if(S.done) html += `<div class="result">${esc(resultTxt())}</div>`;
+  const ss0 = S.done ? superStriker() : null;
+  if(ss0) html += `<div class="banner">⚡ Super Striker: <b>${esc(superTxt(ss0))}</b></div>`;
   else if(i===0 && inn.done) html += `<div class="result">Innings break · target ${target()}</div>`;
   if(isViewer && S.u) html += `<div class="prev">Last updated ${new Date(S.u).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</div>`;
   $("board").innerHTML = html;
@@ -684,6 +686,20 @@ function sideTxt(){
   return S.size ? `${S.size}-a-side` : "";
 }
 const oversWord = l => { const t = oversTxt(l); return t.endsWith(".0") ? t.slice(0,-2) : t; };
+const srTxt1 = f => f.b ? Math.round(f.r*100/f.b) : "–"; /* batting strike rate */
+/* Super Striker: highest strike rate in the match among batters with at least 10 runs (Full mode).
+   Ties go to more runs, then fewer balls. */
+function superStriker(){
+  if(!full()) return null;
+  let best = null;
+  [0,1].forEach(i=>battedList(S.innings[i]).forEach(p=>{
+    const f = batFig(S.innings[i], p); if(f.r < 10 || !f.b) return;
+    const sr = f.r*100/f.b, c = {i, p, name:pname(i,p), r:f.r, b:f.b, sr, out:!!f.out};
+    if(!best || sr > best.sr || (sr===best.sr && (f.r > best.r || (f.r===best.r && f.b < best.b)))) best = c;
+  }));
+  return best;
+}
+const superTxt = s => `${s.name} ${s.r}${s.out?"":"*"} (${s.b}), SR ${Math.round(s.sr)}`;
 function topBat(inn, n){ return battedList(inn).map(p=>({p, ...batFig(inn,p)})).sort((a,b)=>b.r-a.r || a.b-b.b).slice(0,n); }
 function topBowl(inn, n){ return bowledList(inn).map(p=>({p, ...bowlFig(inn,p)})).sort((a,b)=>b.w-a.w || a.r-b.r).slice(0,n); }
 function quickStats(inn){
@@ -699,9 +715,9 @@ function scoreText(){
       const inn = S.innings[i]; if(!inn.balls.length) return;
       const st = stats(inn);
       L.push("", `*${S.teams[i].toUpperCase()}  ${st.runs}-${st.wk}*  (${oversWord(st.legal)}/${S.overs} ov)`);
-      const t = ["```", padE("Batter",13) + padS("R",4) + padS("B",4)];
+      const t = ["```", padE("Batter",13) + padS("R",4) + padS("B",4) + padS("SR",5)];
       const cut = (s,n)=> s.length > n ? s.slice(0, n-1) + "…" : s;
-      topBat(inn,4).forEach(r=>t.push(padE(cut(pname(i,r.p),12) + (r.out?"":"*"),13) + padS(r.r,4) + padS(r.b,4)));
+      topBat(inn,4).forEach(r=>t.push(padE(cut(pname(i,r.p),12) + (r.out?"":"*"),13) + padS(r.r,4) + padS(r.b,4) + padS(srTxt1(r),5)));
       t.push("", padE("Bowler",13) + padS("W-R",6) + padS("O",5));
       topBowl(inn,4).forEach(r=>t.push(padE(pname(1-i,r.p),13) + padS(`${r.w}-${r.r}`,6) + padS(oversTxt(r.legal),5)));
       if(st.wd+st.nb) t.push("", `Extras ${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})`);
@@ -720,6 +736,8 @@ function scoreText(){
       "```"].join("\n"));
   }
   L.push("", S.done ? `*${resultTxt().toUpperCase()}*` : "Match in progress");
+  const ss = S.done ? superStriker() : null;
+  if(ss) L.push(`⚡ *Super Striker:* ${superTxt(ss)}`);
   L.push("_Scored with TurfCricScore_");
   return L.join("\n");
 }
@@ -1077,9 +1095,10 @@ function drawSummary(){
         x.fillStyle = k%2 ? th.rowB : th.rowA; x.fillRect(IX, ry, IW, ROW-2);
         const b = bat[k], w = bowl[k];
         if(b){
-          text(pname(i,b.p).toUpperCase(), IX+28, ry+ROW/2, D("700",38), "#FFFFFF", "left", IW/2-260);
-          text(`${b.r}${b.out?"":"*"}`, mid-150, ry+ROW/2, D("700",38), "#FFFFFF", "center");
-          text(b.b, mid-55, ry+ROW/2, D("600",34), "rgba(255,255,255,.88)", "center");
+          text(pname(i,b.p).toUpperCase(), IX+28, ry+ROW/2, D("700",38), "#FFFFFF", "left", IW/2-370);
+          text(`${b.r}${b.out?"":"*"}`, mid-270, ry+ROW/2, D("700",38), "#FFFFFF", "center");
+          text(b.b, mid-185, ry+ROW/2, D("600",34), "rgba(255,255,255,.88)", "center");
+          text(`SR ${srTxt1(b)}`, mid-24, ry+ROW/2, D("600",28), "rgba(255,255,255,.78)", "right");
         }
         if(w){
           text(pname(1-i,w.p).toUpperCase(), mid+28, ry+ROW/2, D("700",38), "#FFFFFF", "left", IW/2-280);
@@ -1110,6 +1129,16 @@ function drawSummary(){
   /* footer */
   text([sideTxt().toUpperCase(), `${S.overs} OVER${S.overs===1?"":"S"}`, S.toss].filter(Boolean).join("  ·  "), PX+30, PY+PH+44, D("600",34), "rgba(255,255,255,.92)", "left", PW-360);
   text("TURFCRICSCORE", PX+PW-30, PY+PH+42, D("700",30), "rgba(255,255,255,.85)", "right");
+  const ss = S.done ? superStriker() : null;
+  if(ss){
+    const label = "SUPER STRIKER", val = `${ss.name.toUpperCase()}  ${ss.r}${ss.out?"":"*"} (${ss.b})  ·  SR ${Math.round(ss.sr)}`;
+    x.font = D("700",30); const lw = x.measureText(label).width; x.font = D("700",36); const vw = Math.min(x.measureText(val).width, 900);
+    const ph = 64, pw = lw + vw + 96, px = W/2 - pw/2, py = Math.max(10, Math.round((PY - ph)/2));
+    x.fillStyle = lin(py, py+ph, [[0,"#FFE07A"],[1,"#E0A21B"]]); rrect(px, py, pw, ph, 32); x.fill();
+    x.fillStyle = "#1B1F24"; rrect(px+6, py+6, lw+44, ph-12, 26); x.fill();
+    text(label, px+28, py+ph/2+1, D("700",30), "#FFD45A", "left");
+    text(val, px+lw+74, py+ph/2+1, D("700",36), "#1B1F24", "left", 900);
+  }
 
   c.toBlob(b=>{
     if(!b) return;
@@ -1229,13 +1258,13 @@ function renderCard(){
     const st = stats(inn);
     h += `<h3>${esc(S.teams[i])} ${st.runs}/${st.wk} (${oversTxt(st.legal)} ov)</h3>`;
     const batted = battedList(inn);
-    h += `<div class="tw"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th></tr></thead><tbody>`;
+    h += `<div class="tw"><table><thead><tr><th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th></tr></thead><tbody>`;
     batted.forEach(p=>{
       const f = batFig(inn,p);
       const how = howOut(inn, i, p, f);
-      h += `<tr><td>${esc(pname(i,p))}<span class="how">${esc(how)}</span></td><td>${f.r}</td><td>${f.b}</td><td>${f.f}</td><td>${f.s}</td></tr>`;
+      h += `<tr><td>${esc(pname(i,p))}<span class="how">${esc(how)}</span></td><td>${f.r}</td><td>${f.b}</td><td>${f.f}</td><td>${f.s}</td><td>${srTxt1(f)}</td></tr>`;
     });
-    h += `<tr><td>Extras</td><td colspan="4">${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})</td></tr></tbody></table></div>`;
+    h += `<tr><td>Extras</td><td colspan="5">${st.wd+st.nb} (wd ${st.wd}, nb ${st.nb})</td></tr></tbody></table></div>`;
     const bowled = []; inn.balls.forEach(b=>{ if(b.bw!=null && !bowled.includes(b.bw)) bowled.push(b.bw); });
     if(bowled.length){
       h += `<div class="tw"><table><thead><tr><th>Bowler</th><th>O</th><th>R</th><th>W</th><th>Econ</th></tr></thead><tbody>`;
